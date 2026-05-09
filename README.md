@@ -94,6 +94,6 @@ To deploy for campus-wide testing:
 ## 📄 License & Credits
 
 Built with ❤️ for **Lakshmi Narain College of Technology, Bhopal**.  
-Designed for students, by students.
+Designed for students, by Krishna Mohan Kumar Deo.
 
 ---
