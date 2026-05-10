@@ -5,13 +5,51 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import L from 'leaflet';
 import 'leaflet-routing-machine';
-import { Search, Navigation, LocateFixed, Layers, Info, ArrowLeft, X, Plus, Minus, Globe, Map, Check, MapPin, Volume2, VolumeX, Moon, Coffee, Home, Book, Trophy, PenTool } from 'lucide-react';
+import { Search, Navigation, LocateFixed, Layers, Info, ArrowLeft, X, Plus, Minus, Globe, Map, Check, MapPin, Volume2, VolumeX, Moon, Coffee, Home, Book, Trophy, PenTool, Sparkles, Mountain, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useCampusStore from '../store/useCampusStore';
 import useToastStore from '../store/useToastStore';
 import useThemeStore from '../store/useThemeStore';
+import { CAMPUS_PRODUCTION_DATA } from '../data/campusProductionData';
+
+const RoadNetwork = ({ baseLayer }) => {
+  const paths = useCampusStore(state => state.paths || []);
+  if (baseLayer !== 'vibrant') return null;
+
+  return (
+    <>
+      {paths.map((path, idx) => (
+        <React.Fragment key={path.id || idx}>
+          {/* Main Dark Asphalt Surface */}
+          <Polyline 
+            positions={path.polylineCoords}
+            pathOptions={{
+              color: '#1e293b', // Deep Slate/Black
+              weight: 7,
+              opacity: 0.8,
+              lineJoin: 'round',
+              pane: 'shadowPane' // Keep it below markers but above tiles
+            }}
+          />
+          {/* White Dashed Center Line */}
+          <Polyline 
+            positions={path.polylineCoords}
+            pathOptions={{
+              color: '#ffffff',
+              weight: 1.2,
+              opacity: 0.7,
+              dashArray: '8, 12',
+              lineJoin: 'round',
+              pane: 'shadowPane'
+            }}
+          />
+        </React.Fragment>
+      ))}
+    </>
+  );
+};
 
 const MapControls = ({ userLocation, setUserLocation, userHeading, isMapFollowHeading, setIsMapFollowHeading }) => {
   const map = useMap();
@@ -228,6 +266,8 @@ import { buildingService } from '../services/api';
 
 const RoutingEngine = ({ userLocation, destination }) => {
   const map = useMap();
+  const [routePath, setRoutePath] = useState(null);
+  const [dotPos, setDotPos] = useState(null);
   
   useEffect(() => {
     if (!map || !userLocation || !destination) return;
@@ -242,24 +282,76 @@ const RoutingEngine = ({ userLocation, destination }) => {
       draggableWaypoints: false,
       fitSelectedRoutes: true,
       showAlternatives: false,
+      createMarker: () => null,
       lineOptions: {
-        styles: [{ color: '#3b82f6', weight: 6, opacity: 0.8, lineCap: 'round' }]
-      },
-      createMarker: () => null // Hide default markers
+        styles: [{ color: '#3b82f6', weight: 8, opacity: 0.2, lineCap: 'round' }]
+      }
     }).addTo(map);
 
-    // Hide the instruction panel (we want a clean UI)
+    routingControl.on('routesfound', (e) => {
+      const routes = e.routes;
+      const coordinates = routes[0].coordinates;
+      setRoutePath(coordinates);
+    });
+
     const container = routingControl.getContainer();
     if (container) container.style.display = 'none';
 
-    return () => {
-      if (map && routingControl) {
-        map.removeControl(routingControl);
-      }
-    };
+    return () => map.removeControl(routingControl);
   }, [map, userLocation, destination]);
 
-  return null;
+  // Dot Animation Effect
+  useEffect(() => {
+    if (!routePath || routePath.length < 2) return;
+    
+    let step = 0;
+    const interval = setInterval(() => {
+      setDotPos(routePath[step]);
+      step = (step + 1) % routePath.length;
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [routePath]);
+
+  return (
+    <>
+      {routePath && (
+        <Polyline 
+          positions={routePath} 
+          pathOptions={{ 
+            color: '#3b82f6', 
+            weight: 6, 
+            dashArray: '10, 15', 
+            className: 'animate-route-flow'
+          }} 
+        />
+      )}
+      {dotPos && (
+        <CircleMarker 
+          center={dotPos} 
+          radius={6} 
+          pathOptions={{ 
+            fillColor: '#ffffff', 
+            fillOpacity: 1, 
+            color: '#3b82f6', 
+            weight: 3,
+            className: 'navigator-dot'
+          }} 
+        />
+      )}
+      <style>{`
+        @keyframes flow {
+          to { stroke-dashoffset: -25; }
+        }
+        .animate-route-flow {
+          animation: flow 1s linear infinite;
+        }
+        .navigator-dot {
+          filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.9));
+        }
+      `}</style>
+    </>
+  );
 };
 
 const RecenterHandler = ({ center }) => {
@@ -278,7 +370,11 @@ const MapFocus = ({ coords }) => {
   const map = useMap();
   useEffect(() => {
     if (coords) {
-      map.setView(coords, 17.5, { animate: true });
+      map.flyTo(coords, 18.5, {
+        duration: 1.8,
+        easeLinearity: 0.25,
+        noMoveStart: true
+      });
     }
   }, [coords, map]);
   return null;
@@ -293,14 +389,21 @@ const getBuildingSVG = (name, type) => {
   }
 
   // Sports & Recreation
-  if (lowerName.includes('volleyball') || lowerName.includes('basketball')) {
-    return '<circle cx="12" cy="12" r="10"/><path d="M4.93 4.93a10 10 0 0 1 14.14 14.14M19.07 4.93a10 10 0 0 0-14.14 14.14"/>';
-  }
-  if (lowerName.includes('ground') || lowerName.includes('sports')) {
+  if (lowerName.includes('volleyball') || lowerName.includes('basketball') || lowerName.includes('ground') || lowerName.includes('sports')) {
     return '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0 0 12 0V2Z"/>';
   }
   if (lowerName.includes('gym')) {
     return '<path d="m6.5 6.5 11 11M6.5 17.5l11-11M2 9v6M22 9v6M5 21v-4M19 21v-4M5 7V3M19 7V3"/>';
+  }
+
+  // Workshop & Technical
+  if (lowerName.includes('workshop')) {
+    return '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.77 3.77z"/>'; // Wrench icon
+  }
+
+  // Stationery & Shops
+  if ((lowerName.includes('stationery') || lowerName.includes('store') || lowerName.includes('shop')) && !lowerName.includes('workshop')) {
+    return '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>'; // Pencil icon
   }
 
   // Food & Dining
@@ -317,9 +420,6 @@ const getBuildingSVG = (name, type) => {
   }
   if (lowerName.includes('main building')) {
     return '<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>';
-  }
-  if (lowerName.includes('lncte') || lowerName.includes('excellence')) {
-    return '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>';
   }
   
   // Gate
@@ -363,9 +463,19 @@ const getBuildingSVG = (name, type) => {
 
 const IMPORTANT_BUILDINGS = [
   "LNCT MAIN BUILDING",
+  "LNCTS OLD BUILDING",
   "LNCTS NEW BUILDING",
   "LNCTE BUILDING",
   "LNCP BUILDING",
+  "MCA",
+  "MCA BLOCK",
+  "AGRICULTURE",
+  "AGRICULTURE BLOCK",
+  "VISWAKARMA",
+  "VISWAKARMA BLOCK",
+  "CV RAMAN",
+  "CV RAMAN BLOCK",
+  "EXCELLENCE",
   "MAIN GATE",
   "LNCT MAIN GATE"
 ];
@@ -411,6 +521,8 @@ const createBuildingIcon = (name, type, isSelected, currentZoom, mapCenter, coor
     colorClass = 'bg-pink-500';
   } else if (lowerName.includes('boys hostel') || lowerName.includes('hostel')) {
     colorClass = 'bg-indigo-600';
+  } else if (lowerName.includes('stationery') || lowerName.includes('shop')) {
+    colorClass = 'bg-violet-600';
   } else if (lowerName.includes('quarter') || lowerName.includes('faculty') || type === 'Residential') {
     colorClass = 'bg-teal-600'; // Teal for Faculty/Residential
   } else if (lowerName.includes('workshop')) {
@@ -426,7 +538,7 @@ const createBuildingIcon = (name, type, isSelected, currentZoom, mapCenter, coor
   } else if (type === 'Gate') {
     colorClass = 'bg-slate-800';
   } else if (lowerName.includes('medical') || lowerName.includes('health')) {
-    colorClass = 'bg-red-500'; // Red for medical
+    colorClass = 'bg-red-600';
   }
   
   const isImportant = IMPORTANT_BUILDINGS.includes(name.toUpperCase());
@@ -463,7 +575,8 @@ const createBuildingIcon = (name, type, isSelected, currentZoom, mapCenter, coor
     html: `
       <div class="relative flex flex-col items-center">
         ${isSelected ? '<div class="absolute -top-1 w-10 h-10 bg-blue-600/30 rounded-full animate-ping"></div>' : ''}
-        <div class="relative w-8 h-8 ${colorClass} rounded-full border-2 border-white shadow-xl flex items-center justify-center transition-all duration-500 z-10">
+        ${isImportant && !isSelected ? '<div class="absolute inset-0 w-8 h-8 bg-amber-400/20 rounded-full animate-pulse blur-sm"></div>' : ''}
+        <div class="relative w-8 h-8 ${colorClass} rounded-full border-2 ${isImportant ? 'border-amber-400 ring-2 ring-amber-400/50 shadow-[0_0_15px_rgba(251,191,36,0.5)]' : 'border-white'} shadow-xl flex items-center justify-center transition-all duration-500 z-10">
           ${isText 
             ? `<span class="text-white font-bold text-lg leading-none">${content}</span>`
             : `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${content}</svg>`
@@ -483,13 +596,100 @@ const createBuildingIcon = (name, type, isSelected, currentZoom, mapCenter, coor
   });
 };
 
+
+const ContextFilterControl = ({ activeFilter, setActiveFilter, showToast }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const filters = [
+    { id: 'All', icon: Globe, label: 'All View' },
+    { id: 'Academic', icon: Book, label: 'Studying' },
+    { id: 'Hostel', icon: Home, label: 'Living' },
+    { id: 'Sports', icon: Trophy, label: 'Playing' },
+    { id: 'Events', icon: Sparkles, label: 'Events' }
+  ];
+
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            className="mb-1 p-2.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl space-y-2 min-w-[190px]"
+          >
+            <div className="px-3 pt-1.5 pb-0.5 flex items-center justify-between">
+              <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-400">Smart Views</h3>
+              <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                <X size={12} className="text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-1">
+              {filters.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => {
+                    setActiveFilter(f.id);
+                    showToast(`${f.id} View Active`, `Now highlighting ${f.id.toLowerCase()} areas.`);
+                    setIsOpen(false);
+                  }}
+                  className={clsx(
+                    "flex items-center justify-between p-2.5 rounded-xl transition-all duration-300 group",
+                    activeFilter === f.id 
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" 
+                      : "bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  )}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <f.icon size={16} className={clsx(activeFilter === f.id ? "text-white" : "text-blue-500")} />
+                    <span className="text-[10px] font-black uppercase tracking-tight">{f.label}</span>
+                  </div>
+                  {activeFilter === f.id && <Check size={12} />}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.9 }}
+        onClick={() => setIsOpen(!isOpen)}
+        className={clsx(
+          "p-2.5 rounded-xl shadow-xl backdrop-blur-xl transition-all group border-2 relative overflow-hidden",
+          isOpen || activeFilter !== 'All'
+            ? "bg-blue-600 text-white border-blue-400/50 shadow-blue-500/30" 
+            : "bg-white/95 dark:bg-slate-900/95 text-slate-700 dark:text-slate-200 border-white dark:border-slate-800"
+        )}
+      >
+        <Filter 
+          size={18} 
+          className={clsx(
+            "transition-all duration-300 ease-out",
+            isOpen ? "rotate-12 scale-110" : "rotate-0 group-hover:rotate-12",
+            activeFilter !== 'All' && !isOpen ? "animate-pulse" : ""
+          )} 
+        />
+        {activeFilter !== 'All' && !isOpen && (
+           <div className="absolute top-0 right-0 w-2 h-2 bg-green-500 rounded-full border-2 border-white dark:border-slate-900"></div>
+        )}
+      </motion.button>
+    </div>
+  );
+};
+
+
+
 const CustomLayersControl = ({ baseLayer, setBaseLayer, showBoundary, setShowBoundary }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const layers = [
-    { id: 'street', name: 'Street View', icon: Map, color: 'bg-blue-500' },
-    { id: 'satellite', name: 'Satellite View', icon: Globe, color: 'bg-indigo-600' },
-    { id: 'dark', name: 'Dark View', icon: Moon, color: 'bg-slate-900' },
+    { id: 'street', name: 'Voyager', icon: Map, color: 'bg-blue-500' },
+    { id: 'vibrant', name: 'Vibrant', icon: Sparkles, color: 'bg-orange-500' },
+    { id: 'satellite', name: 'Satellite (HD)', icon: Globe, color: 'bg-indigo-600' },
+    { id: 'dark', name: 'Dark', icon: Moon, color: 'bg-slate-900' },
   ];
 
   return (
@@ -585,7 +785,7 @@ const CustomLayersControl = ({ baseLayer, setBaseLayer, showBoundary, setShowBou
   );
 };
 
-const MapEventsHandler = ({ setZoom, setSelectedBuilding, setMapCenter }) => {
+const MapEventsHandler = ({ setZoom, setSelectedBuilding, setMapCenter, setMapBounds }) => {
   const setIsNavbarVisible = useCampusStore(state => state.setIsNavbarVisible);
   const [lastY, setLastY] = useState(null);
 
@@ -593,6 +793,11 @@ const MapEventsHandler = ({ setZoom, setSelectedBuilding, setMapCenter }) => {
     zoomend: (e) => {
       setZoom(e.target.getZoom());
       setMapCenter(e.target.getCenter());
+      setMapBounds(e.target.getBounds());
+    },
+    moveend: (e) => {
+      setMapCenter(e.target.getCenter());
+      setMapBounds(e.target.getBounds());
     },
     movestart: (e) => {
       setLastY(e.target.getCenter().lat);
@@ -647,8 +852,12 @@ const CampusMap = () => {
     selectedBuilding, 
     setSelectedBuilding,
     navigationPath,
-    setNavigationPath
+    setNavigationPath,
+    events,
+    fetchEvents
   } = useCampusStore();
+
+  const [selectedEvent, setSelectedEvent] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [userLocation, setUserLocation] = useState(null);
@@ -658,6 +867,8 @@ const CampusMap = () => {
   const [showBoundary, setShowBoundary] = useState(true);
   const [zoom, setZoom] = useState(17);
   const [mapCenter, setMapCenter] = useState(LNCT_CENTER);
+  const [mapBounds, setMapBounds] = useState(null);
+  const [activeFilter, setActiveFilter] = useState('All');
   const [isNavigating, setIsNavigating] = useState(false);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [wakeLock, setWakeLock] = useState(null);
@@ -665,6 +876,25 @@ const CampusMap = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMapFollowHeading, setIsMapFollowHeading] = useState(false);
   const showToast = useToastStore(state => state.showToast);
+
+  // Helper to find the nearest entrance for a building
+  const getNearestEntrance = (building) => {
+    if (!building) return null;
+    const entrances = buildings.filter(b => b.type === 'Entrance' || b.type === 'Gate');
+    if (entrances.length === 0) return building.coords;
+
+    let nearest = building.coords;
+    let minDist = Infinity;
+
+    entrances.forEach(ent => {
+      const dist = L.latLng(building.coords).distanceTo(L.latLng(ent.coords));
+      if (dist < minDist && dist < 100) { // Only snap if entrance is within 100m
+        minDist = dist;
+        nearest = ent.coords;
+      }
+    });
+    return nearest;
+  };
 
   // Voice Instruction System
   const speak = (text) => {
@@ -720,8 +950,14 @@ const CampusMap = () => {
           setUserLocation(null);
         }
       },
-      (err) => console.error("GPS Error", err),
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+      (err) => {
+        if (err.code === 3) {
+          console.warn("GPS Timeout: Hardware is taking long to get a lock.");
+        } else {
+          console.error("GPS Error", err);
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
     );
 
     // Compass / Orientation Logic
@@ -785,7 +1021,8 @@ const CampusMap = () => {
 
   useEffect(() => {
     fetchBuildings();
-  }, [fetchBuildings]);
+    fetchEvents();
+  }, [fetchBuildings, fetchEvents]);
 
   useEffect(() => {
     if (targetBuildingName && buildings.length > 0) {
@@ -904,6 +1141,7 @@ const CampusMap = () => {
         maxZoom={19}
         zoomControl={false}
         attributionControl={false}
+        rotateControl={false}
         className={clsx("z-0 transition-transform duration-300 ease-out", isMapFollowHeading ? "map-rotating" : "")}
         style={isMapFollowHeading ? { 
           transform: `rotate(${userHeading || 0}deg)`,
@@ -927,13 +1165,21 @@ const CampusMap = () => {
           setZoom={setZoom} 
           setSelectedBuilding={setSelectedBuilding} 
           setMapCenter={setMapCenter}
+          setMapBounds={setMapBounds}
         />
         <MapFocus coords={selectedBuilding?.coords} />
         
+        {/* Dynamic Road Network for Vibrant View */}
+        <RoadNetwork baseLayer={baseLayer} />
+        
         {isNavigating && userLocation && selectedBuilding && (
-          <RoutingEngine userLocation={userLocation} destination={selectedBuilding.coords} />
+          <RoutingEngine 
+            userLocation={userLocation} 
+            destination={getNearestEntrance(selectedBuilding)} 
+          />
         )}
         
+
         {/* World Mask - Hides area outside campus */}
         <Polygon 
           positions={[WORLD_MASK, CAMPUS_BOUNDARY]}
@@ -953,15 +1199,20 @@ const CampusMap = () => {
         
         {baseLayer === 'street' && (
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png"
+            maxZoom={22}
+            maxNativeZoom={19}
+          />
+        )}
+        {baseLayer === 'vibrant' && (
+          <TileLayer
+            url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"
             maxZoom={22}
             maxNativeZoom={19}
           />
         )}
         {baseLayer === 'satellite' && (
           <TileLayer
-            attribution='&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             maxZoom={22}
             maxNativeZoom={19}
@@ -969,8 +1220,7 @@ const CampusMap = () => {
         )}
         {baseLayer === 'dark' && (
           <TileLayer 
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
             maxZoom={22}
             maxNativeZoom={19}
           />
@@ -989,64 +1239,55 @@ const CampusMap = () => {
           />
         )}
 
-        {/* Render Navigation Paths (Walking Network/Shortcuts) */}
-        {useMemo(() => buildings.map((building) => {
-          if (building.type !== 'Path' || !building.polylineCoords) return null;
-          
-          // Only show shortcuts if a target is selected or we are actively navigating
-          const activeNav = !!selectedBuilding || !!navigationPath;
-          if (!activeNav) return null;
+        {/* Navigation is now handled dynamically by RoutingEngine or Navigation page */}
 
-          return (
-            <Polyline 
-              key={`path-${building.id}`}
-              positions={building.polylineCoords}
-              pathOptions={{
-                color: isDark ? '#64748b' : '#94a3b8',
-                weight: 2,
-                dashArray: '5, 10',
-                opacity: 0.6
-              }}
-            />
-          );
-        }), [buildings, selectedBuilding, navigationPath, isDark])}
-
-        {/* Render Active A* Navigation Path (Calculated) */}
-        {navigationPath && (
-          <Polyline 
-            positions={navigationPath}
-            pathOptions={{
-              color: '#3b82f6',
-              weight: 5,
-              opacity: 0.8,
-              lineJoin: 'round',
-              lineCap: 'round'
-            }}
-          />
-        )}
+        {/* A* paths are no longer rendered here to maintain consistency with map routing */}
 
         <MarkerClusterGroup
           chunkedLoading
-          maxClusterRadius={80}
+          maxClusterRadius={30}
           spiderfyOnMaxZoom={true}
           showCoverageOnHover={false}
           iconCreateFunction={createClusterIcon}
         >
           {useMemo(() => buildings.map((building) => {
-            if (!building || !building.coords) return null;
+            if (!building?.coords || !building.coords[0]) return null;
+            
+            // LAZY LOAD: Only render if inside or near viewport
+            if (mapBounds && !mapBounds.pad(0.1).contains(building.coords) && selectedBuilding?.id !== building.id) {
+              return null;
+            }
             
             const isSelected = selectedBuilding?.id === building.id;
             const isMainGate = building.name?.toLowerCase().includes('main gate') && !building.name?.toLowerCase().includes('area');
+            
+            // FILTER LOGIC
+            const hasEvent = events?.some(e => 
+              (e.venueId && e.venueId !== '' && e.venueId === building.id) || 
+              (e.venue && e.venue !== '' && e.venue === building.name)
+            );
+            const lowerName = building.name?.toLowerCase() || '';
+            const passesFilter = activeFilter === 'All' || 
+                               (activeFilter === 'Academic' && building.type === 'Academic') ||
+                               (activeFilter === 'Hostel' && (lowerName.includes('hostel') || lowerName.includes('quarter'))) ||
+                               (activeFilter === 'Sports' && lowerName.includes('ground')) ||
+                               (activeFilter === 'Events' && hasEvent);
+
             const isGateOrEntrance = building.type === 'Gate' || building.type === 'Entrance';
             const isPath = building.type === 'Path' || building.id?.includes('path');
             const isSub = building.type === 'Room' || building.type === 'Lab' || building.parent_id;
             
+            const isImportant = IMPORTANT_BUILDINGS.includes(building.name?.toUpperCase());
+
             // STRICT FILTERING:
-            // 1. If it's a Path, NEVER show marker (paths are polyline only)
-            // 2. If it's a Gate/Entrance, ONLY show if it's the MAIN GATE
-            // 3. Otherwise show if not sub-location, or if sub-location and zoomed in
+            // 1. Must pass the active context filter (If not 'All', even IMPORTANT landmarks must pass)
+            // 2. Unless it is explicitly selected
+            // 3. If it's a Path, NEVER show marker (paths are polyline only)
+            // 4. If it's a Gate/Entrance, ONLY show if it's the MAIN GATE
+            // 5. Otherwise show if not sub-location, or if sub-location and zoomed in
+            const isContextMatch = activeFilter === 'All' ? (isImportant || passesFilter) : passesFilter;
             const shouldInclude = isSelected || (
-                                   !isPath && (
+                                   isContextMatch && !isPath && (
                                      isMainGate || 
                                      (!isGateOrEntrance && !isSub) ||
                                      (!isGateOrEntrance && isSub && zoom >= 18)
@@ -1086,35 +1327,65 @@ const CampusMap = () => {
 
         {/* Render Polygons separately from clusters */}
         {useMemo(() => buildings.map((building) => {
-          if (!building.polygonCoords) return null;
-          const isSelected = selectedBuilding?.id === building.id;
+          if (!building?.polygonCoords || !building?.coords || !building.coords[0]) return null;
           
+          // LAZY LOAD: Only render polygons in viewport
+          if (mapBounds && !mapBounds.pad(0.1).contains(building.coords) && selectedBuilding?.id !== building.id) {
+            return null;
+          }
+
+          const isSelected = selectedBuilding?.id === building.id;
+          const hasEvent = events?.some(e => 
+            (e.venueId && e.venueId !== '' && e.venueId === building.id) || 
+            (e.venue && e.venue !== '' && e.venue === building.name)
+          );
+          
+          // POLYGON FILTER LOGIC
+          const lowerName = building.name?.toLowerCase() || '';
+          const passesFilter = activeFilter === 'All' || 
+                             (activeFilter === 'Academic' && building.type === 'Academic') ||
+                             (activeFilter === 'Hostel' && (lowerName.includes('hostel') || lowerName.includes('quarter'))) ||
+                             (activeFilter === 'Sports' && lowerName.includes('ground')) ||
+                             (activeFilter === 'Events' && hasEvent);
+
+          const isEventArea = activeFilter === 'Events' && hasEvent;
+
+          // If a specific filter is active, DIM everything that doesn't match it
+          const dimOpacity = activeFilter !== 'All' && !passesFilter;
+
           return (
             <Polygon 
               key={`poly-${building.id}`}
               positions={building.polygonCoords}
               pathOptions={{
-                color: isSelected ? '#ef4444' : (selectedBuilding ? 'transparent' : (
-                  building.name.toLowerCase().includes('girls hostel') ? '#ec4899' :
-                  building.name.toLowerCase().includes('boys hostel') ? '#4f46e5' :
-                  building.name.toLowerCase().includes('workshop') ? '#334155' :
-                  (building.name.toLowerCase().includes('mandir') || building.name.toLowerCase().includes('temple')) ? '#f97316' :
+                color: isSelected ? '#ef4444' : (dimOpacity ? '#cbd5e1' : (
+                  building.name.toLowerCase().includes('girls hostel') ? '#db2777' :
+                  building.name.toLowerCase().includes('boys hostel') ? '#4338ca' :
+                  (building.name.toLowerCase().includes('ground') || building.name.toLowerCase().includes('garden') || building.name.toLowerCase().includes('lawn')) ? '#15803d' :
                   building.type === 'Academic' ? '#3b82f6' : '#64748b'
                 )),
-                fillColor: isSelected ? '#ef4444' : (selectedBuilding ? 'transparent' : (
+                fillColor: isSelected ? '#ef4444' : (dimOpacity ? '#cbd5e1' : (
                   building.name.toLowerCase().includes('girls hostel') ? '#ec4899' :
                   building.name.toLowerCase().includes('boys hostel') ? '#4f46e5' :
+                  (building.name.toLowerCase().includes('ground') || building.name.toLowerCase().includes('garden') || building.name.toLowerCase().includes('lawn')) ? '#22c55e' :
                   building.name.toLowerCase().includes('workshop') ? '#334155' :
                   (building.name.toLowerCase().includes('mandir') || building.name.toLowerCase().includes('temple')) ? '#f97316' :
                   building.type === 'Academic' ? '#3b82f6' : '#94a3b8'
                 )),
-                fillOpacity: isSelected ? 0.5 : (selectedBuilding ? 0 : 0.2),
-                weight: isSelected ? 3 : 1
+                fillOpacity: isSelected ? 0.5 : (isEventArea ? 0.6 : (dimOpacity ? 0.05 : 0.2)),
+                weight: isSelected ? 3 : (isEventArea ? 4 : 1),
+                className: isEventArea ? "event-pulse" : ""
               }}
               eventHandlers={{
                 click: (e) => {
                   L.DomEvent.stopPropagation(e);
                   setSelectedBuilding(building);
+                  if (hasEvent) {
+                    const event = events.find(ev => ev.venueId === building.id || ev.venueId === building.name);
+                    setSelectedEvent(event);
+                  } else {
+                    setSelectedEvent(null);
+                  }
                 },
               }}
             />
@@ -1178,6 +1449,85 @@ const CampusMap = () => {
         />
         <RecenterHandler center={LNCT_CENTER} />
       </MapContainer>
+
+      <AnimatePresence>
+        {selectedEvent && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="absolute top-20 left-4 right-4 sm:left-auto sm:right-6 sm:w-[380px] z-[2000] bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/20 dark:border-slate-800 overflow-hidden flex flex-col"
+          >
+            {/* Event Banner */}
+            <div className="relative h-40 w-full overflow-hidden">
+              <img 
+                src={selectedEvent.banner || "https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=1000"} 
+                className="w-full h-full object-cover transition-transform duration-700 hover:scale-110"
+                alt={selectedEvent.title}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+              <button 
+                onClick={() => setSelectedEvent(null)}
+                className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full text-white transition-all active:scale-90"
+              >
+                <X size={18} />
+              </button>
+              <div className="absolute bottom-4 left-6 right-6">
+                <span className="px-2.5 py-1 bg-blue-600 text-[10px] font-black uppercase tracking-widest text-white rounded-lg shadow-lg shadow-blue-600/30 mb-2 inline-block">
+                  {selectedEvent.category}
+                </span>
+                <h3 className="text-xl font-black text-white leading-tight">{selectedEvent.title}</h3>
+              </div>
+            </div>
+
+            {/* Event Details */}
+            <div className="p-6 space-y-5">
+              <div className="flex items-center gap-4 text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-xl text-blue-600 dark:text-blue-400">
+                    <Clock size={16} />
+                  </div>
+                  <span className="text-xs font-bold">{new Date(selectedEvent.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-purple-50 dark:bg-purple-900/30 rounded-xl text-purple-600 dark:text-purple-400">
+                    <MapPin size={16} />
+                  </div>
+                  <span className="text-xs font-bold truncate max-w-[120px]">{selectedEvent.venue}</span>
+                </div>
+              </div>
+
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                {selectedEvent.description}
+              </p>
+
+              <div className="pt-2 flex items-center justify-between gap-3">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Organizer</span>
+                  <span className="text-xs font-black text-slate-700 dark:text-slate-200">{selectedEvent.organizer}</span>
+                </div>
+                <button 
+                  onClick={() => {
+                    const venueBuilding = buildings.find(b => 
+                      (selectedEvent.venueId && b.id === selectedEvent.venueId) || 
+                      (selectedEvent.venue && b.name === selectedEvent.venue)
+                    );
+                    if (venueBuilding) {
+                      handleStartNavigation({ name: venueBuilding.name, coords: venueBuilding.coords });
+                    } else {
+                      showToast("Navigation Error", "Could not find the exact location of this venue.");
+                    }
+                  }}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-2 group"
+                >
+                  Go There
+                  <Navigation size={14} className="group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Mobile Info Panel */}
       <AnimatePresence>
@@ -1267,6 +1617,13 @@ const CampusMap = () => {
             </p>
           </div>
         </motion.div>
+
+        {/* Context View Switcher (Smart Filters) */}
+        <ContextFilterControl 
+          activeFilter={activeFilter} 
+          setActiveFilter={setActiveFilter} 
+          showToast={showToast} 
+        />
 
         {/* Custom Layer Control */}
         <CustomLayersControl 

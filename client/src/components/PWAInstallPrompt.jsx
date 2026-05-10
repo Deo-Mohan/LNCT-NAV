@@ -95,10 +95,10 @@ const PWAInstallPrompt = () => {
               
               <div className="flex-1">
                 <h3 className="text-lg font-black text-slate-900 dark:text-white leading-tight">
-                  Install LNCT Navigator
+                  Install LNCT Smart Campus Navigator
                 </h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                  Get the full campus experience with offline support and real-time GPS.
+                  Experience seamless indoor & outdoor navigation with offline maps and real-time campus events.
                 </p>
               </div>
               

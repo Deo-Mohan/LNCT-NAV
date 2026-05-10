@@ -86,6 +86,16 @@
   }
 }
 
+@keyframes glowing-pulse {
+  0% { fill-opacity: 0.3; stroke-width: 2; }
+  50% { fill-opacity: 0.7; stroke-width: 6; }
+  100% { fill-opacity: 0.3; stroke-width: 2; }
+}
+
+.event-pulse {
+  animation: glowing-pulse 2s infinite ease-in-out;
+}
+
 /* Leaflet Overrides */
 .leaflet-container {
   width: 100%;
@@ -112,8 +122,17 @@
   display: none !important;
 }
 
+.leaflet-control-attribution {
+  display: none !important;
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Hide Leaflet Rotate Control arrow */
+.leaflet-control-rotate {
+  display: none !important;
 }
 
 .no-scrollbar {

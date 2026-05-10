@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search as SearchIcon, MapPin, Building, ChevronRight, X, Clock, Utensils, Trophy } from 'lucide-react';
+import { Search as SearchIcon, MapPin, Building, ChevronRight, X, Clock, Utensils, Trophy, Mic, ArrowUpLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import { clsx } from 'clsx';
@@ -16,6 +16,53 @@ const SearchPage = () => {
   const [recentSearches, setRecentSearches] = useState([]);
   const navigate = useNavigate();
   const { bookmarks, toggleBookmark } = useCampusStore();
+  const [isListening, setIsListening] = useState(false);
+
+  const highlightMatch = (text, query) => {
+    if (!query) return text;
+    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    return (
+      <span>
+        {parts.map((part, i) => 
+          part.toLowerCase() === query.toLowerCase() 
+            ? <span key={i} className="text-blue-600 dark:text-blue-400 font-black">{part}</span> 
+            : <span key={i}>{part}</span>
+        )}
+      </span>
+    );
+  };
+
+  const handleVoiceSearch = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice search is not supported on this browser");
+      return;
+    }
+    
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-IN';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript.replace(/\.$/, '');
+      setQuery(transcript);
+      setIsListening(false);
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognition.start();
+  };
+
+  const getGhostText = () => {
+    if (!query || query.length < 2 || results.length === 0) return '';
+    const topMatch = results[0].name;
+    if (topMatch.toLowerCase().startsWith(query.toLowerCase())) {
+      return topMatch.slice(query.length);
+    }
+    return '';
+  };
 
   // Load recent searches on mount
   useEffect(() => {
@@ -90,15 +137,50 @@ const SearchPage = () => {
           <div className="relative group">
             <div className="[--background:theme(colors.slate.50)] [--color:theme(colors.blue.600)] [--muted:theme(colors.slate.100)] [--border:theme(colors.slate.200)] dark:[--background:theme(colors.slate.900)] dark:[--color:theme(colors.blue.400)] dark:[--muted:theme(colors.slate.800)] dark:[--border:theme(colors.slate.700)] relative flex items-center transition-all border border-[--border] bg-[--background] focus-within:bg-[--muted] px-5 py-1.5 rounded-[2rem] shadow-xl shadow-blue-500/5 focus-within:border-blue-500/50 hover:border-blue-500/30">
               <SearchIcon className="text-slate-400 group-focus-within:text-blue-500 transition-colors mr-3" size={20} />
-              <input 
-                type="text" 
-                placeholder="Search LNCT Campus..." 
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="w-full bg-transparent border-none focus:ring-0 outline-none text-slate-900 dark:text-white placeholder:text-slate-400 font-bold py-3"
-                autoFocus
-              />
+              
+              <div className="flex-1 relative">
+                {/* Ghost Text Overlay */}
+                <div className="absolute inset-0 flex items-center pointer-events-none select-none text-slate-900 dark:text-white font-bold opacity-40 whitespace-pre">
+                  <span className="opacity-0">{query}</span>
+                  <span 
+                    onClick={() => {
+                      if (results.length > 0) setQuery(results[0].name);
+                    }}
+                    className="pointer-events-auto cursor-pointer"
+                  >
+                    {getGhostText()}
+                  </span>
+                </div>
+
+                <input 
+                  type="text" 
+                  placeholder="Search LNCT Campus..." 
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && results.length > 0) {
+                      const ghost = getGhostText();
+                      if (ghost) {
+                        e.preventDefault();
+                        setQuery(results[0].name);
+                      }
+                    }
+                  }}
+                  className="w-full bg-transparent border-none focus:ring-0 outline-none text-slate-900 dark:text-white placeholder:text-slate-400 font-bold py-3 relative z-10"
+                  autoFocus
+                />
+              </div>
+
               <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleVoiceSearch}
+                  className={clsx(
+                    "p-2 rounded-full transition-all",
+                    isListening ? "bg-red-500 text-white animate-pulse" : "hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"
+                  )}
+                >
+                  <Mic size={18} />
+                </button>
                 {query && (
                   <button 
                     onClick={() => setQuery('')}
@@ -178,11 +260,13 @@ const SearchPage = () => {
                     <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                       <Icon size={24} />
                     </div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">{result.name}</h4>
-                      <p className="text-sm text-slate-500">{result.type} • {result.description || 'LNCT Campus'}</p>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors truncate">
+                        {highlightMatch(result.name, query)}
+                      </h4>
+                      <p className="text-sm text-slate-500 truncate">{result.type} • {result.description || 'LNCT Campus'}</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       <BookmarkToggle 
                         isBookmarked={bookmarks.some(b => b.id === result.id)} 
                         onToggle={() => toggleBookmark(result)} 

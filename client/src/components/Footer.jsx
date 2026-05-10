@@ -1,8 +1,23 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import appLogo from '../assets/lnct app logo.png';
 
 const Footer = () => {
+  const [clicks, setClicks] = React.useState(0);
+  const [showAdmin, setShowAdmin] = React.useState(false);
+
+  const handleLogoClick = () => {
+    const newClicks = clicks + 1;
+    setClicks(newClicks);
+    if (newClicks >= 5) {
+      setShowAdmin(true);
+    }
+    // Reset clicks after 2 seconds of inactivity
+    const timer = setTimeout(() => setClicks(0), 2000);
+    return () => clearTimeout(timer);
+  };
+
   return (
     <footer className="w-full py-12 px-6 mt-12 transition-all duration-500 bg-white/30 dark:bg-slate-900/40 backdrop-blur-xl border-t border-slate-200/50 dark:border-slate-800/50">
       <div className="max-w-3xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
@@ -40,8 +55,11 @@ const Footer = () => {
 
         {/* Right Section: Branding & Credits */}
         <div className="flex flex-col items-center md:items-end text-center md:text-right gap-3">
-          <div className="flex items-center gap-3 bg-white/50 dark:bg-white/5 p-2 px-3 rounded-xl border border-white/20 dark:border-white/10 shadow-sm backdrop-blur-sm">
-            <img src={appLogo} alt="LNCT Logo" className="h-8 w-auto object-contain" />
+          <div 
+            onClick={handleLogoClick}
+            className="flex items-center gap-3 bg-white/50 dark:bg-white/5 p-2 px-3 rounded-xl border border-white/20 dark:border-white/10 shadow-sm backdrop-blur-sm cursor-pointer active:scale-95 transition-transform"
+          >
+            <img src={appLogo} alt="LNCT Logo" className="h-8 w-auto object-contain select-none" />
             <div className="text-left border-l border-slate-200 dark:border-slate-700 pl-3">
               <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-tight">Powered by</p>
               <p className="text-[11px] font-black text-slate-700 dark:text-slate-300 leading-tight">LNCT Group</p>
@@ -60,8 +78,8 @@ const Footer = () => {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto mt-8 pt-6 border-t border-slate-200/30 dark:border-slate-800/30 flex justify-center">
-        <div className="flex gap-6">
+      <div className="max-w-2xl mx-auto mt-8 pt-6 border-t border-slate-200/30 dark:border-slate-800/30 flex justify-center overflow-hidden">
+        <div className="flex gap-6 items-center">
           {['Privacy', 'Terms', 'Support'].map((item) => (
             <span key={item} className="text-[9px] font-bold text-slate-400 hover:text-blue-500 cursor-pointer transition-colors uppercase tracking-widest">
               {item}
@@ -70,6 +88,17 @@ const Footer = () => {
           <Link to="/developer" className="text-[9px] font-bold text-slate-400 hover:text-blue-500 cursor-pointer transition-colors uppercase tracking-widest">
             Developer
           </Link>
+          {showAdmin && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 'auto', opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+            >
+              <Link to="/login" className="text-[9px] font-black text-blue-600 dark:text-blue-400 hover:text-blue-500 cursor-pointer transition-colors uppercase tracking-widest border border-blue-500/20 px-2 py-0.5 rounded-md bg-blue-500/5">
+                Admin
+              </Link>
+            </motion.div>
+          )}
         </div>
       </div>
     </footer>

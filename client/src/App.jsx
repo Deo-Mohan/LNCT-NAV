@@ -8,12 +8,16 @@ import IndoorFloor from './pages/IndoorFloor';
 import Search from './pages/Search';
 import Admin from './pages/Admin';
 import Developer from './pages/Developer';
+import Events from './pages/Events';
+import Login from './pages/Login';
 import Navbar from './components/Navbar';
 import PageTransition from './components/PageTransition';
 import Loader from './components/Loader';
 import SuccessToast from './components/SuccessToast';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import ReloadPrompt from './components/ReloadPrompt';
 import PermissionModal from './components/PermissionModal';
+import AdminGuard from './components/AdminGuard';
 import useThemeStore from './store/useThemeStore';
 
 function AnimatedRoutes() {
@@ -27,8 +31,14 @@ function AnimatedRoutes() {
         <Route path="/navigate" element={<PageTransition><Navigation /></PageTransition>} />
         <Route path="/floor/:building/:floor" element={<PageTransition><IndoorFloor /></PageTransition>} />
         <Route path="/search" element={<PageTransition><Search /></PageTransition>} />
-        <Route path="/admin" element={<PageTransition><Admin /></PageTransition>} />
+        <Route path="/admin" element={
+          <AdminGuard>
+            <PageTransition><Admin /></PageTransition>
+          </AdminGuard>
+        } />
         <Route path="/developer" element={<PageTransition><Developer /></PageTransition>} />
+        <Route path="/events" element={<PageTransition><Events /></PageTransition>} />
+        <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
       </Routes>
     </AnimatePresence>
   );
@@ -74,6 +84,7 @@ function App() {
         <Navbar />
         <SuccessToast />
         <PWAInstallPrompt />
+        <ReloadPrompt />
         <PermissionModal />
         <main className="flex-grow flex flex-col overflow-x-hidden">
           <AnimatedRoutes />

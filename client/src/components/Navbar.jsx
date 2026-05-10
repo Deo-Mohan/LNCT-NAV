@@ -24,7 +24,6 @@ const Navbar = () => {
     { path: '/map', icon: MapIcon, label: 'Map' },
     { path: '/search', icon: Search, label: 'Search' },
     { path: '/navigate', icon: Navigation, label: 'Go' },
-    { path: '/developer', icon: Code, label: 'Dev' },
   ];
 
   return (

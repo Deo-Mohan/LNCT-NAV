@@ -1,12 +1,35 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Search, Navigation, ArrowRight } from 'lucide-react';
+import { MapPin, Search, Navigation, ArrowRight, Sun, Cloud, CloudRain, CloudLightning, Moon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Footer from '../components/Footer';
 import logo from '../assets/lnct logo.png';
-import appLogo from '../assets/lnct app logo.png';
+import useCampusStore from '../store/useCampusStore';
 
 const Home = () => {
+  const { weather, fetchWeather } = useCampusStore();
+
+  React.useEffect(() => {
+    fetchWeather();
+  }, []);
+
+  const getWeatherIcon = () => {
+    const condition = weather?.condition?.toLowerCase() || '';
+    if (!weather.isDay) return <Moon size={18} />;
+    if (condition.includes('sunny') || condition.includes('clear')) return <Sun size={18} />;
+    if (condition.includes('rain')) return <CloudRain size={18} />;
+    if (condition.includes('storm')) return <CloudLightning size={18} />;
+    return <Cloud size={18} />;
+  };
+
+  const getIconColor = () => {
+    const condition = weather?.condition?.toLowerCase() || '';
+    if (!weather.isDay) return 'text-indigo-400 bg-indigo-100 dark:bg-indigo-900/30';
+    if (condition.includes('sunny') || condition.includes('clear')) return 'text-amber-600 bg-amber-100 dark:bg-amber-900/30';
+    if (condition.includes('rain') || condition.includes('storm')) return 'text-blue-600 bg-blue-100 dark:bg-blue-900/30';
+    return 'text-slate-600 bg-slate-100 dark:bg-slate-900/30';
+  };
+
   return (
     <div className="flex flex-col items-center justify-between min-h-[calc(100vh-64px)] px-6 py-12 bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 overflow-x-hidden">
       <motion.div 
@@ -77,44 +100,83 @@ const Home = () => {
               r
             </h1>
           </div>
+          
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="inline-flex items-center gap-3 px-5 py-2.5 bg-white/40 dark:bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-white/20 dark:border-white/10 shadow-lg mx-auto mb-6"
+          >
+            <div className={`p-2 rounded-lg ${getIconColor()}`}>
+              {weather.temp === '--' ? <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" /> : getWeatherIcon()}
+            </div>
+            <div className="text-left leading-tight">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-slate-900 dark:text-white">{weather.temp}{weather.temp !== '--' ? '°C' : ''}</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  {weather.temp === '--' ? 'Detecting...' : `${weather.condition} Campus`}
+                </span>
+              </div>
+              <p className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-tight">{weather.forecast}</p>
+            </div>
+          </motion.div>
+
           <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl mx-auto">
             The ultimate guide to Lakshmi Narain College of Technology. Find blocks, classrooms, and labs with precision indoor navigation.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-12 max-w-[320px] sm:max-w-none mx-auto w-full px-2">
-          <Link to="/map" className="w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-12 max-w-4xl mx-auto w-full px-4">
+          <Link to="/map" className="w-full h-full">
             <motion.div 
               whileTap={{ scale: 0.98 }}
-              className="p-6 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-2xl border border-white/20 dark:border-white/10 shadow-xl hover:shadow-2xl transition-all group"
+              className="h-full p-6 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-2xl border border-white/20 dark:border-white/10 shadow-xl hover:shadow-2xl transition-all group flex flex-col justify-between"
             >
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-blue-600 text-white sm:bg-blue-100/50 sm:dark:bg-blue-900/30 sm:text-blue-600 sm:group-hover:bg-blue-600 sm:group-hover:text-white transition-colors rounded-xl backdrop-blur-sm">
                   <MapPin size={24} />
                 </div>
-                <div className="text-left">
+                <div className="text-left flex-1">
                   <h3 className="font-bold text-slate-900 dark:text-white">Explore Campus</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Interactive outdoor map</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Outdoor map</p>
                 </div>
-                <ArrowRight className="ml-auto text-blue-600 sm:text-slate-300 sm:group-hover:text-blue-600 transition-colors" size={20} />
+                <ArrowRight className="text-blue-600 sm:text-slate-300 sm:group-hover:text-blue-600 transition-colors" size={20} />
               </div>
             </motion.div>
           </Link>
 
-          <Link to="/search" className="w-full">
+          <Link to="/search" className="w-full h-full">
             <motion.div 
               whileTap={{ scale: 0.98 }}
-              className="p-6 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-2xl border border-white/20 dark:border-white/10 shadow-xl hover:shadow-2xl transition-all group"
+              className="h-full p-6 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-2xl border border-white/20 dark:border-white/10 shadow-xl hover:shadow-2xl transition-all group flex flex-col justify-between"
             >
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-amber-600 text-white sm:bg-amber-100/50 sm:dark:bg-amber-900/30 sm:text-amber-600 sm:group-hover:bg-amber-600 sm:group-hover:text-white transition-colors rounded-xl backdrop-blur-sm">
                   <Search size={24} />
                 </div>
-                <div className="text-left">
+                <div className="text-left flex-1">
                   <h3 className="font-bold text-slate-900 dark:text-white">Find a Room</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Classrooms, Labs & Offices</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Classrooms & Labs</p>
                 </div>
-                <ArrowRight className="ml-auto text-amber-600 sm:text-slate-300 sm:group-hover:text-amber-600 transition-colors" size={20} />
+                <ArrowRight className="text-amber-600 sm:text-slate-300 sm:group-hover:text-amber-600 transition-colors" size={20} />
+              </div>
+            </motion.div>
+          </Link>
+
+          <Link to="/events" className="w-full h-full sm:col-span-2 lg:col-span-1">
+            <motion.div 
+              whileTap={{ scale: 0.98 }}
+              className="h-full p-6 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-2xl border border-white/20 dark:border-white/10 shadow-xl hover:shadow-2xl transition-all group flex flex-col justify-between"
+            >
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-purple-600 text-white sm:bg-purple-100/50 sm:dark:bg-purple-900/30 sm:text-purple-600 sm:group-hover:bg-purple-600 sm:group-hover:text-white transition-colors rounded-xl backdrop-blur-sm">
+                  <Navigation size={24} />
+                </div>
+                <div className="text-left flex-1">
+                  <h3 className="font-bold text-slate-900 dark:text-white">Campus Events</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">What's happening</p>
+                </div>
+                <ArrowRight className="text-purple-600 sm:text-slate-300 sm:group-hover:text-purple-600 transition-colors" size={20} />
               </div>
             </motion.div>
           </Link>
