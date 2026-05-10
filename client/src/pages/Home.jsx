@@ -30,6 +30,14 @@ const Home = () => {
     return 'text-slate-600 bg-slate-100 dark:bg-slate-900/30';
   };
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    if (hour < 21) return 'Good Evening';
+    return 'Good Night';
+  };
+
   return (
     <div className="flex flex-col items-center justify-between min-h-[calc(100vh-64px)] px-6 py-12 bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 overflow-x-hidden">
       <motion.div 
@@ -111,6 +119,7 @@ const Home = () => {
               {weather.temp === '--' ? <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" /> : getWeatherIcon()}
             </div>
             <div className="text-left leading-tight">
+              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 mb-0.5">{getGreeting()} 👋</p>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-black text-slate-900 dark:text-white">{weather.temp}{weather.temp !== '--' ? '°C' : ''}</span>
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">

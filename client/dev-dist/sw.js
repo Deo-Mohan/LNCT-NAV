@@ -78,7 +78,7 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
    */
   workbox.precacheAndRoute([{
     "url": "index.html",
-    "revision": "0.jf0i32ed88g"
+    "revision": "0.1h4kmbuanqg"
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {
@@ -93,19 +93,26 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
       statuses: [0, 200]
     })]
   }), 'GET');
-  workbox.registerRoute(/^https:\/\/\{s\}\.tile\.openstreetmap\.org\/.*/i, new workbox.CacheFirst({
-    "cacheName": "map-tiles-cache",
+  workbox.registerRoute(/^https:\/\/fonts\.gstatic\.com\/.*/i, new workbox.CacheFirst({
+    "cacheName": "gstatic-fonts-cache",
     plugins: [new workbox.ExpirationPlugin({
-      maxEntries: 500,
-      maxAgeSeconds: 2592000
+      maxEntries: 10,
+      maxAgeSeconds: 31536000
     }), new workbox.CacheableResponsePlugin({
       statuses: [0, 200]
     })]
   }), 'GET');
-  workbox.registerRoute(/^https:\/\/server\.arcgisonline\.com\/ArcGIS\/rest\/services\/World_Imagery\/MapServer\/tile\/.*/i, new workbox.CacheFirst({
-    "cacheName": "satellite-tiles-cache",
+  workbox.registerRoute(/\.(?:png|jpg|jpeg|svg|gif)$/, new workbox.CacheFirst({
+    "cacheName": "images-cache",
     plugins: [new workbox.ExpirationPlugin({
-      maxEntries: 200,
+      maxEntries: 50,
+      maxAgeSeconds: 2592000
+    })]
+  }), 'GET');
+  workbox.registerRoute(/^https:\/\/(?:[a-z]\.)?tile\.openstreetmap\.org\/.*/i, new workbox.CacheFirst({
+    "cacheName": "map-tiles-cache",
+    plugins: [new workbox.ExpirationPlugin({
+      maxEntries: 500,
       maxAgeSeconds: 2592000
     }), new workbox.CacheableResponsePlugin({
       statuses: [0, 200]

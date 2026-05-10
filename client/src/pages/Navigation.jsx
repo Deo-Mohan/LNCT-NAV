@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import MapLayersControl from '../components/MapLayersControl';
 import useCampusStore from '../store/useCampusStore';
 import useToastStore from '../store/useToastStore';
+import { CAMPUS_PRODUCTION_DATA } from '../data/campusProductionData';
 import { 
   CheckCircle, 
   Search as SearchIcon, 
@@ -24,7 +26,8 @@ import {
   Moon,
   Navigation2,
   Mic,
-  ArrowUpLeft
+  ArrowUpLeft,
+  Battery
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMap, Polyline } from 'react-leaflet';
 import L from 'leaflet';
@@ -103,25 +106,41 @@ const MapRotation = ({ userLocation, heading, enabled }) => {
   return null;
 };
 
-import { CAMPUS_PRODUCTION_DATA } from '../data/campusProductionData';
 
-const RoadNetwork = ({ baseLayer }) => {
+
+const RoadNetwork = () => {
   const paths = useCampusStore(state => state.paths || []);
-  if (baseLayer !== 'vibrant') return null;
+  const mapLayer = useCampusStore(state => state.mapLayer);
+  if (mapLayer !== 'vibrant' && mapLayer !== 'dark') return null;
+
+  const isVibrant = mapLayer === 'vibrant';
+
   return (
     <>
-      {paths.map((path, idx) => (
-        <React.Fragment key={path.id || idx}>
-          <Polyline 
-            positions={path.polylineCoords}
-            pathOptions={{ color: '#1e293b', weight: 7, opacity: 0.8, lineJoin: 'round' }}
-          />
-          <Polyline 
-            positions={path.polylineCoords}
-            pathOptions={{ color: '#ffffff', weight: 1.2, opacity: 0.7, dashArray: '8, 12', lineJoin: 'round' }}
-          />
-        </React.Fragment>
-      ))}
+      {paths.map((path, idx) => {
+        if (!path.polylineCoords || !Array.isArray(path.polylineCoords) || path.polylineCoords.length < 2) return null;
+        return (
+          <React.Fragment key={path.id || idx}>
+            {isVibrant ? (
+              <>
+                <Polyline 
+                  positions={path.polylineCoords}
+                  pathOptions={{ color: '#1e293b', weight: 12, opacity: 0.9, lineJoin: 'round', lineCap: 'round' }}
+                />
+                <Polyline 
+                  positions={path.polylineCoords}
+                  pathOptions={{ color: '#ffffff', weight: 2, opacity: 0.8, dashArray: '10, 15', lineJoin: 'round', lineCap: 'round' }}
+                />
+              </>
+            ) : (
+              <Polyline 
+                positions={path.polylineCoords}
+                pathOptions={{ color: '#facc15', weight: 3, opacity: 0.7, dashArray: '12, 8', lineJoin: 'round', lineCap: 'round' }}
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
     </>
   );
 };
@@ -218,7 +237,7 @@ const OfflineRoutingModule = ({ origin, destination, userLocation, heading, onRo
 
 const Navigation = () => {
   const navigate = useNavigate();
-  const { buildings, fetchBuildings } = useCampusStore();
+  const { buildings, fetchBuildings, mapLayer, setMapLayer } = useCampusStore();
   const showToast = useToastStore(state => state.showToast);
   
   const [step, setStep] = useState(1);
@@ -231,12 +250,49 @@ const Navigation = () => {
   const [routeSummary, setRouteSummary] = useState({ distance: 0, time: 0, instructions: [] });
   const [heading, setHeading] = useState(0);
   const [isMapFollowHeading, setIsMapFollowHeading] = useState(false);
-  const [baseLayer, setBaseLayer] = useState('street');
   const [routingMode, setRoutingMode] = useState('online'); // 'online' or 'offline'
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isListening, setIsListening] = useState(null); // 'origin' or 'destination'
   const location = useLocation();
+  const [isLowBattery, setIsLowBattery] = useState(false);
+  const [batteryLevel, setBatteryLevel] = useState(100);
 
+  // Smart Battery Aware Navigation
+  useEffect(() => {
+    let batteryManager;
+    const updateBatteryStatus = (battery) => {
+      const level = Math.round(battery.level * 100);
+      setBatteryLevel(level);
+      
+      // If battery is 20% or below and NOT charging, activate power saving navigation
+      if (level <= 20 && !battery.charging) {
+        if (!isLowBattery) {
+          setIsLowBattery(true);
+          setMapLayer('dark'); // Switch to dark mode map
+          setIsMapFollowHeading(false); // Disable map rotation to save CPU/GPU
+          showToast("Battery Aware Mode", "Switched to Dark Mode & Disabled 3D Compass to save power.");
+        }
+      } else {
+        setIsLowBattery(false);
+      }
+    };
+
+    if ('getBattery' in navigator) {
+      navigator.getBattery().then(battery => {
+        batteryManager = battery;
+        updateBatteryStatus(battery);
+        battery.addEventListener('levelchange', () => updateBatteryStatus(battery));
+        battery.addEventListener('chargingchange', () => updateBatteryStatus(battery));
+      });
+    }
+
+    return () => {
+      if (batteryManager) {
+        batteryManager.removeEventListener('levelchange', () => updateBatteryStatus(batteryManager));
+        batteryManager.removeEventListener('chargingchange', () => updateBatteryStatus(batteryManager));
+      }
+    };
+  }, [setMapLayer, showToast]);
   const highlightMatch = (text, query) => {
     if (!query) return text;
     const parts = text.split(new RegExp(`(${query})`, 'gi'));
@@ -414,6 +470,21 @@ const Navigation = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-slate-50 dark:bg-slate-950 overflow-hidden">
+      
+      {/* Smart Battery Aware Banner */}
+      <AnimatePresence>
+        {isLowBattery && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-2 text-xs font-bold shadow-md z-30"
+          >
+            <Battery size={14} className="animate-pulse" />
+            Low Battery ({batteryLevel}%): Power Saving Mode Active (Dark Mode + 2D)
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Header - Hide during active navigation */}
       {step === 1 && (
         <div className="p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-20 shadow-sm relative">
@@ -429,14 +500,14 @@ const Navigation = () => {
               <button 
                 onClick={() => {
                   const layers = ['street', 'satellite', 'dark'];
-                  const nextIndex = (layers.indexOf(baseLayer) + 1) % layers.length;
-                  setBaseLayer(layers[nextIndex]);
+                  const nextIndex = (layers.indexOf(mapLayer) + 1) % layers.length;
+                  setMapLayer(layers[nextIndex]);
                 }}
                 className="p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors flex items-center gap-2 text-slate-600 dark:text-slate-300"
               >
-                {baseLayer === 'street' && <Globe size={18} />}
-                {baseLayer === 'satellite' && <MapIcon size={18} />}
-                {baseLayer === 'dark' && <Moon size={18} />}
+                {mapLayer === 'street' && <Globe size={18} />}
+                {mapLayer === 'satellite' && <MapIcon size={18} />}
+                {mapLayer === 'dark' && <Moon size={18} />}
               </button>
             </div>
           )}
@@ -741,21 +812,33 @@ const Navigation = () => {
                     )}
                     <MapRotation userLocation={userLocation} heading={heading} enabled={isMapFollowHeading} />
                     
-                    <RoadNetwork baseLayer={baseLayer} />
+                    <RoadNetwork />
+                    
+                    <div className="absolute bottom-32 left-4 z-[1000]">
+                      <MapLayersControl 
+                        baseLayer={mapLayer} 
+                        setBaseLayer={setMapLayer}
+                      />
+                    </div>
 
-                    {baseLayer === 'street' && (
+                    {mapLayer === 'street' && (
                       <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png" />
                     )}
-                    {baseLayer === 'vibrant' && (
-                      <TileLayer url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png" />
+                    {mapLayer === 'vibrant' && (
+                      <TileLayer 
+                        url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png" 
+                        maxZoom={22}
+                        maxNativeZoom={19}
+                        attribution='&copy; <a href="https://www.cyclosm.org">CyclOSM</a> contributors'
+                      />
                     )}
-                    {baseLayer === 'satellite' && (
+                    {mapLayer === 'satellite' && (
                       <TileLayer 
                         url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" 
                         attribution='&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
                       />
                     )}
-                    {baseLayer === 'dark' && (
+                    {mapLayer === 'dark' && (
                       <TileLayer 
                         url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -766,7 +849,7 @@ const Navigation = () => {
                       position={origin ? origin.coords : userLocation}
                       icon={L.divIcon({
                         className: 'user-location-icon',
-                        html: `<div style="transform: rotate(${heading}deg); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);" class="relative flex items-center justify-center">
+                        html: `<div style="transform: rotate(${isMapFollowHeading ? 0 : heading}deg); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);" class="relative flex items-center justify-center">
                                <div class="w-12 h-12 bg-blue-500/20 rounded-full animate-ping absolute"></div>
                                <div class="w-9 h-9 bg-white rounded-full shadow-2xl flex items-center justify-center border border-slate-200">
                                  <div class="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center">
@@ -832,17 +915,6 @@ const Navigation = () => {
                       <Navigation2 size={24} className={clsx(isMapFollowHeading && "animate-pulse")} />
                     </button>
                     
-                    <button 
-                      onClick={() => {
-                        const layers = ['vibrant', 'street', 'satellite', 'dark'];
-                        const next = layers[(layers.indexOf(baseLayer) + 1) % layers.length];
-                        setBaseLayer(next);
-                        showToast(`View: ${next.toUpperCase()}`, `Switched to ${next} map style`);
-                      }}
-                      className="p-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-2xl shadow-xl text-slate-900 dark:text-white border border-white/20 dark:border-slate-800/50 flex items-center justify-center group"
-                    >
-                      <Layers size={24} className="group-hover:rotate-12 transition-transform" />
-                    </button>
                   </div>
                 </div>
 

@@ -42,5 +42,16 @@ export const CAMPUS_EVENTS = [
     category: "Cultural",
     banner: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=1000",
     organizer: "Cultural Committee"
+  },
+  {
+    id: "sports_meet_2026",
+    title: "Inter-College Cricket Tournament",
+    description: "Annual sports meet featuring the final match between LNCT and LNCTS.",
+    time: "2026-05-18T09:00:00Z",
+    venue: "LNCT Ground (West)",
+    venueId: "ground_lnct_west",
+    category: "Sports",
+    banner: "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&q=80&w=1000",
+    organizer: "Sports Department"
   }
 ];

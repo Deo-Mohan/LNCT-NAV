@@ -5,48 +5,107 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import L from 'leaflet';
 import 'leaflet-routing-machine';
-import { Search, Navigation, LocateFixed, Layers, Info, ArrowLeft, X, Plus, Minus, Globe, Map, Check, MapPin, Volume2, VolumeX, Moon, Coffee, Home, Book, Trophy, PenTool, Sparkles, Mountain, Filter } from 'lucide-react';
+import { Search, Navigation, LocateFixed, Layers, Info, ArrowLeft, X, Plus, Minus, Globe, Map, Check, MapPin, Volume2, VolumeX, Moon, Coffee, Home, Book, Trophy, PenTool, Sparkles, Mountain, Filter, Clock, Link2, User, Phone, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { CAMPUS_PRODUCTION_DATA } from '../data/campusProductionData';
+import MapLayersControl from '../components/MapLayersControl';
 import useCampusStore from '../store/useCampusStore';
 import useToastStore from '../store/useToastStore';
 import useThemeStore from '../store/useThemeStore';
-import { CAMPUS_PRODUCTION_DATA } from '../data/campusProductionData';
 
-const RoadNetwork = ({ baseLayer }) => {
+const EventCountdown = ({ time }) => {
+  const [timeLeft, setTimeLeft] = useState('');
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const difference = new Date(time) - new Date();
+      if (difference > 0) {
+        const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+        const minutes = Math.floor((difference / 1000 / 60) % 60);
+        const seconds = Math.floor((difference / 1000) % 60);
+        
+        let timeString = '';
+        if (days > 0) timeString += `${days}d `;
+        if (hours > 0 || days > 0) timeString += `${hours}h `;
+        timeString += `${minutes}m ${seconds}s`;
+        setTimeLeft(timeString);
+      } else {
+        setTimeLeft('Started');
+      }
+    };
+
+    calculateTimeLeft();
+    const timer = setInterval(calculateTimeLeft, 1000);
+    return () => clearInterval(timer);
+  }, [time]);
+
+  if (!timeLeft) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded-2xl border border-slate-200 dark:border-slate-700/50 justify-center">
+      <Clock size={16} className={timeLeft === 'Started' ? '' : 'animate-pulse'} />
+      <span className="text-xs font-black uppercase tracking-wider">{timeLeft === 'Started' ? 'Happening Now' : `Starts in ${timeLeft}`}</span>
+    </div>
+  );
+};
+const RoadNetwork = () => {
   const paths = useCampusStore(state => state.paths || []);
-  if (baseLayer !== 'vibrant') return null;
+  const mapLayer = useCampusStore(state => state.mapLayer);
+  if (mapLayer !== 'vibrant' && mapLayer !== 'dark') return null;
+
+  const isVibrant = mapLayer === 'vibrant';
 
   return (
     <>
-      {paths.map((path, idx) => (
-        <React.Fragment key={path.id || idx}>
-          {/* Main Dark Asphalt Surface */}
-          <Polyline 
-            positions={path.polylineCoords}
-            pathOptions={{
-              color: '#1e293b', // Deep Slate/Black
-              weight: 7,
-              opacity: 0.8,
-              lineJoin: 'round',
-              pane: 'shadowPane' // Keep it below markers but above tiles
-            }}
-          />
-          {/* White Dashed Center Line */}
-          <Polyline 
-            positions={path.polylineCoords}
-            pathOptions={{
-              color: '#ffffff',
-              weight: 1.2,
-              opacity: 0.7,
-              dashArray: '8, 12',
-              lineJoin: 'round',
-              pane: 'shadowPane'
-            }}
-          />
-        </React.Fragment>
-      ))}
+      {paths.map((path, idx) => {
+        if (!path.polylineCoords || !Array.isArray(path.polylineCoords) || path.polylineCoords.length < 2) return null;
+        return (
+          <React.Fragment key={path.id || idx}>
+            {isVibrant ? (
+              <>
+                {/* Vibrant: Dark asphalt road with white center dashes */}
+                <Polyline 
+                  positions={path.polylineCoords}
+                  pathOptions={{
+                    color: '#1e293b',
+                    weight: 12,
+                    opacity: 0.9,
+                    lineJoin: 'round',
+                    lineCap: 'round'
+                  }}
+                />
+                <Polyline 
+                  positions={path.polylineCoords}
+                  pathOptions={{
+                    color: '#ffffff',
+                    weight: 2,
+                    opacity: 0.8,
+                    dashArray: '10, 15',
+                    lineJoin: 'round',
+                    lineCap: 'round'
+                  }}
+                />
+              </>
+            ) : (
+              /* Dark: Yellow dashed path lines */
+              <Polyline 
+                positions={path.polylineCoords}
+                pathOptions={{
+                  color: '#facc15',
+                  weight: 3,
+                  opacity: 0.7,
+                  dashArray: '12, 8',
+                  lineJoin: 'round',
+                  lineCap: 'round'
+                }}
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
     </>
   );
 };
@@ -64,13 +123,15 @@ const MapControls = ({ userLocation, setUserLocation, userHeading, isMapFollowHe
         const distance = L.latLng(coords).distanceTo(L.latLng(LNCT_CENTER));
         const isInside = isPointInCampus(coords);
         
-        if (!isInside && distance > 1500) {
-          // If too far, show toast and fly to Main Gate as fallback
-          showToast("Out of LNCT Campus", "You are currently too far. Showing LNCT Main Gate instead.");
-          const mainGate = [23.2514627, 77.5247203]; // LNCT Main Gate
+        if (!isInside && distance > 1000) {
+          // If more than 1km away, show strict boundary message
+          showToast("Out of Campus Boundary", "You are currently more than 1km away from LNCT.");
+          // Fly to Main Gate so they can at least see the campus
+          const mainGate = [23.2514627, 77.5247203]; 
           map.flyTo(mainGate, 17.5, { duration: 1.5 });
+          setUserLocation(null);
         } else {
-          // If inside or nearby, show actual GPS location
+          // If inside or within 1km, show actual GPS location
           setUserLocation(coords);
           map.flyTo(coords, 17.5, { duration: 1.5 });
         }
@@ -681,110 +742,6 @@ const ContextFilterControl = ({ activeFilter, setActiveFilter, showToast }) => {
 };
 
 
-
-const CustomLayersControl = ({ baseLayer, setBaseLayer, showBoundary, setShowBoundary }) => {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const layers = [
-    { id: 'street', name: 'Voyager', icon: Map, color: 'bg-blue-500' },
-    { id: 'vibrant', name: 'Vibrant', icon: Sparkles, color: 'bg-orange-500' },
-    { id: 'satellite', name: 'Satellite (HD)', icon: Globe, color: 'bg-indigo-600' },
-    { id: 'dark', name: 'Dark', icon: Moon, color: 'bg-slate-900' },
-  ];
-
-  return (
-    <div className="flex flex-col items-start gap-2">
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 10 }}
-            className="mb-1 p-2.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl space-y-2 min-w-[190px]"
-          >
-            <div className="px-3 pt-1.5 pb-0.5 flex items-center justify-between">
-              <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-400">Map Styles</h3>
-              <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-                <X size={12} className="text-slate-400" />
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-1">
-              {layers.map((layer) => (
-                <button
-                  key={layer.id}
-                  onClick={() => setBaseLayer(layer.id)}
-                  className={clsx(
-                    "flex items-center justify-between p-2.5 rounded-xl transition-all duration-300 group",
-                    baseLayer === layer.id 
-                      ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" 
-                      : "bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  )}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <layer.icon size={16} className={clsx(baseLayer === layer.id ? "text-white" : "text-blue-500")} />
-                    <span className="text-[10px] font-black uppercase tracking-tight">{layer.name}</span>
-                  </div>
-                  {baseLayer === layer.id && <Check size={12} />}
-                </button>
-              ))}
-            </div>
-
-            <div className="border-t border-slate-100 dark:border-slate-800 pt-1.5">
-              <button
-                onClick={() => setShowBoundary(!showBoundary)}
-                className={clsx(
-                  "w-full flex items-center justify-between p-2.5 rounded-xl transition-all",
-                  showBoundary 
-                    ? "bg-green-50 dark:bg-green-900/10 text-green-600 dark:text-green-400 border border-green-100/50 dark:border-green-900/30" 
-                    : "bg-slate-50 dark:bg-slate-800/50 text-slate-400 border border-transparent"
-                )}
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className={clsx(
-                    "w-1.5 h-1.5 rounded-full",
-                    showBoundary ? "bg-green-500 animate-pulse" : "bg-slate-300"
-                  )} />
-                  <span className="text-[10px] font-black uppercase tracking-tight">Boundary</span>
-                </div>
-                {showBoundary && <Check size={12} />}
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.9 }}
-        onClick={() => setIsOpen(!isOpen)}
-        className={clsx(
-          "p-2.5 rounded-xl shadow-xl backdrop-blur-xl transition-all group border-2 relative overflow-hidden",
-          isOpen 
-            ? "bg-blue-600 text-white border-blue-400/50 shadow-blue-500/30" 
-            : "bg-white/95 dark:bg-slate-900/95 text-slate-700 dark:text-slate-200 border-white dark:border-slate-800"
-        )}
-      >
-        {isOpen && (
-          <motion.div 
-            initial={{ left: '-100%' }}
-            animate={{ left: '100%' }}
-            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-            className="absolute top-0 bottom-0 w-1/2 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-[-20deg] pointer-events-none"
-          />
-        )}
-        <Layers 
-          size={18} 
-          className={clsx(
-            "transition-all duration-300 ease-out",
-            isOpen ? "rotate-12" : "rotate-0 group-hover:rotate-12 group-active:rotate-12"
-          )} 
-        />
-      </motion.button>
-    </div>
-  );
-};
-
 const MapEventsHandler = ({ setZoom, setSelectedBuilding, setMapCenter, setMapBounds }) => {
   const setIsNavbarVisible = useCampusStore(state => state.setIsNavbarVisible);
   const [lastY, setLastY] = useState(null);
@@ -798,6 +755,8 @@ const MapEventsHandler = ({ setZoom, setSelectedBuilding, setMapCenter, setMapBo
     moveend: (e) => {
       setMapCenter(e.target.getCenter());
       setMapBounds(e.target.getBounds());
+      // Show navbar when scrolling stops
+      setTimeout(() => setIsNavbarVisible(true), 200);
     },
     movestart: (e) => {
       setLastY(e.target.getCenter().lat);
@@ -806,21 +765,13 @@ const MapEventsHandler = ({ setZoom, setSelectedBuilding, setMapCenter, setMapBo
       const currentY = e.target.getCenter().lat;
       if (lastY !== null) {
         const delta = currentY - lastY;
-        // User pulls map DOWN (seeing North) = Scrolling UP
         if (delta > 0.00005) {
           setIsNavbarVisible(false);
-        } 
-        // User pulls map UP (seeing South) = Scrolling DOWN
-        else if (delta < -0.00005) {
+        } else if (delta < -0.00005) {
           setIsNavbarVisible(true);
         }
       }
       setLastY(currentY);
-    },
-    moveend: (e) => {
-      setMapCenter(e.target.getCenter());
-      // Show navbar when scrolling stops
-      setTimeout(() => setIsNavbarVisible(true), 200);
     },
     click: () => {
       setSelectedBuilding(null);
@@ -847,14 +798,13 @@ const CampusMap = () => {
 
   const { 
     buildings, 
-    isLoading, 
     fetchBuildings, 
     selectedBuilding, 
     setSelectedBuilding,
-    navigationPath,
-    setNavigationPath,
     events,
-    fetchEvents
+    fetchEvents,
+    mapLayer,
+    setMapLayer
   } = useCampusStore();
 
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -863,7 +813,6 @@ const CampusMap = () => {
   const [userLocation, setUserLocation] = useState(null);
   const [userHeading, setUserHeading] = useState(null);
   const [distanceToSelected, setDistanceToSelected] = useState(null);
-  const [baseLayer, setBaseLayer] = useState('street');
   const [showBoundary, setShowBoundary] = useState(true);
   const [zoom, setZoom] = useState(17);
   const [mapCenter, setMapCenter] = useState(LNCT_CENTER);
@@ -942,12 +891,15 @@ const CampusMap = () => {
         const distance = L.latLng(coords).distanceTo(L.latLng(LNCT_CENTER));
         const isInside = isPointInCampus(coords);
 
-        // Continuous tracking only if within or near campus
-        if (isInside || distance <= 1500) {
+        // Continuous tracking only if within 1km of campus
+        if (isInside || distance <= 1000) {
           setUserLocation(coords);
-        } else if (userLocation) {
-          // Stop showing marker if they exit the boundary
-          setUserLocation(null);
+        } else {
+          // If they move out of the 1km boundary, clear location
+          if (userLocation) {
+            setUserLocation(null);
+            showToast("Out of Campus Boundary", "GPS tracking paused (too far from campus)");
+          }
         }
       },
       (err) => {
@@ -1034,34 +986,66 @@ const CampusMap = () => {
   }, [targetBuildingName, buildings, setSelectedBuilding]);
 
   const handleFindNearby = (category) => {
-    if (!userLocation) {
-      showToast("Please enable GPS to find places 'Near Me'", "info");
+    const findNearest = (location) => {
+      const filtered = buildings.filter(b => 
+        b.type?.toLowerCase().includes(category.toLowerCase()) || 
+        b.name?.toLowerCase().includes(category.toLowerCase())
+      );
+
+      if (filtered.length === 0) {
+        showToast(`No ${category} found on campus`, "warning");
+        return;
+      }
+
+      const sorted = [...filtered].sort((a, b) => {
+        const distA = L.latLng(location).distanceTo(L.latLng(a.coords));
+        const distB = L.latLng(location).distanceTo(L.latLng(b.coords));
+        return distA - distB;
+      });
+
+      const nearest = sorted[0];
+      const distance = L.latLng(location).distanceTo(L.latLng(nearest.coords));
+      
+      setSelectedBuilding(nearest);
+      showToast(`Found nearest ${category}: ${nearest.name} (${Math.round(distance)}m away)`, "success");
+    };
+
+    if (userLocation) {
+      findNearest(userLocation);
       return;
     }
 
-    const filtered = buildings.filter(b => 
-      b.type?.toLowerCase().includes(category.toLowerCase()) || 
-      b.name?.toLowerCase().includes(category.toLowerCase())
-    );
+    // Auto-request GPS if not already available
+    if ("geolocation" in navigator) {
+      showToast("Getting your location...", "info");
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords = [position.coords.latitude, position.coords.longitude];
+          const distance = L.latLng(coords).distanceTo(L.latLng(LNCT_CENTER));
+          const isInside = isPointInCampus(coords);
 
-    if (filtered.length === 0) {
-      showToast(`No ${category} found on campus`, "warning");
-      return;
+          if (!isInside && distance > 1000) {
+            showToast("Out of Campus Boundary", "You are too far to find 'Nearby' facilities. Showing campus center.");
+            setUserLocation(null);
+            // Fallback: search from campus center
+            findNearest(LNCT_CENTER);
+          } else {
+            setUserLocation(coords);
+            findNearest(coords);
+          }
+        },
+        () => {
+          showToast("Could not get location. Using campus center.", "warning");
+          findNearest(LNCT_CENTER);
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    } else {
+      showToast("GPS is not supported on this device", "warning");
     }
-
-    // Sort by distance
-    const sorted = [...filtered].sort((a, b) => {
-      const distA = L.latLng(userLocation).distanceTo(L.latLng(a.coords));
-      const distB = L.latLng(userLocation).distanceTo(L.latLng(b.coords));
-      return distA - distB;
-    });
-
-    const nearest = sorted[0];
-    const distance = L.latLng(userLocation).distanceTo(L.latLng(nearest.coords));
-    
-    setSelectedBuilding(nearest);
-    showToast(`Found nearest ${category}: ${nearest.name} (${Math.round(distance)}m away)`, "success");
   };
+
+
 
   return (
     <div className="relative w-full h-[calc(100vh-64px)] overflow-hidden">
@@ -1170,7 +1154,7 @@ const CampusMap = () => {
         <MapFocus coords={selectedBuilding?.coords} />
         
         {/* Dynamic Road Network for Vibrant View */}
-        <RoadNetwork baseLayer={baseLayer} />
+        <RoadNetwork />
         
         {isNavigating && userLocation && selectedBuilding && (
           <RoutingEngine 
@@ -1197,28 +1181,28 @@ const CampusMap = () => {
           }}
         />
         
-        {baseLayer === 'street' && (
+        {mapLayer === 'street' && (
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png"
             maxZoom={22}
             maxNativeZoom={19}
           />
         )}
-        {baseLayer === 'vibrant' && (
+        {mapLayer === 'vibrant' && (
           <TileLayer
             url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"
             maxZoom={22}
             maxNativeZoom={19}
           />
         )}
-        {baseLayer === 'satellite' && (
+        {mapLayer === 'satellite' && (
           <TileLayer
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             maxZoom={22}
             maxNativeZoom={19}
           />
         )}
-        {baseLayer === 'dark' && (
+        {mapLayer === 'dark' && (
           <TileLayer 
             url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
             maxZoom={22}
@@ -1230,11 +1214,11 @@ const CampusMap = () => {
           <Polygon 
             positions={CAMPUS_BOUNDARY}
             pathOptions={{
-              color: (isDark || baseLayer === 'dark') ? '#3b82f6' : '#2563eb',
-              fillColor: (isDark || baseLayer === 'dark') ? '#3b82f6' : '#3b82f6',
-              fillOpacity: (isDark || baseLayer === 'dark') ? 0.04 : 0.08,
-              dashArray: (isDark || baseLayer === 'dark') ? '10, 15' : null,
-              weight: (isDark || baseLayer === 'dark') ? 3 : 4
+              color: (isDark || mapLayer === 'dark') ? '#3b82f6' : '#2563eb',
+              fillColor: (isDark || mapLayer === 'dark') ? '#3b82f6' : '#3b82f6',
+              fillOpacity: (isDark || mapLayer === 'dark') ? 0.04 : 0.08,
+              dashArray: (isDark || mapLayer === 'dark') ? '10, 15' : null,
+              weight: (isDark || mapLayer === 'dark') ? 3 : 4
             }}
           />
         )}
@@ -1304,6 +1288,15 @@ const CampusMap = () => {
                 eventHandlers={{
                   click: (e) => {
                     L.DomEvent.stopPropagation(e);
+                    if (activeFilter === 'Events' && hasEvent) {
+                      const eventAtBuilding = events?.find(ev => 
+                        (ev.venueId && ev.venueId !== '' && ev.venueId === building.id) || 
+                        (ev.venue && ev.venue !== '' && ev.venue === building.name)
+                      );
+                      if (eventAtBuilding) {
+                        setSelectedEvent(eventAtBuilding);
+                      }
+                    }
                     setSelectedBuilding(building);
                   },
                 }}
@@ -1350,6 +1343,11 @@ const CampusMap = () => {
 
           const isEventArea = activeFilter === 'Events' && hasEvent;
 
+          // STRICT FILTER: If Events filter is active, ONLY show buildings with events
+          if (activeFilter === 'Events' && !hasEvent) {
+            return null;
+          }
+
           // If a specific filter is active, DIM everything that doesn't match it
           const dimOpacity = activeFilter !== 'All' && !passesFilter;
 
@@ -1379,13 +1377,18 @@ const CampusMap = () => {
               eventHandlers={{
                 click: (e) => {
                   L.DomEvent.stopPropagation(e);
-                  setSelectedBuilding(building);
-                  if (hasEvent) {
-                    const event = events.find(ev => ev.venueId === building.id || ev.venueId === building.name);
-                    setSelectedEvent(event);
+                  if (activeFilter === 'Events' && hasEvent) {
+                    const eventAtBuilding = events?.find(ev => 
+                      (ev.venueId && ev.venueId !== '' && ev.venueId === building.id) || 
+                      (ev.venue && ev.venue !== '' && ev.venue === building.name)
+                    );
+                    if (eventAtBuilding) {
+                      setSelectedEvent(eventAtBuilding);
+                    }
                   } else {
                     setSelectedEvent(null);
                   }
+                  setSelectedBuilding(building);
                 },
               }}
             />
@@ -1406,6 +1409,9 @@ const CampusMap = () => {
                 <h2 class="text-xl sm:text-3xl font-black uppercase tracking-[0.4em] text-blue-600 dark:text-blue-400 mt-2">
                   BHOPAL CAMPUS
                 </h2>
+                <h3 class="text-sm sm:text-base font-black uppercase tracking-[0.6em] text-slate-500 dark:text-slate-500 mt-3">
+                  <- KRISHNA MOHAN -/>
+                </h3>
               </div>
             `,
             iconSize: [1000, 300],
@@ -1423,7 +1429,7 @@ const CampusMap = () => {
                 <div class="relative flex items-center justify-center">
                   <!-- Direction Cone -->
                   <div 
-                    style="transform: rotate(${userHeading || 0}deg); transition: transform 0.2s ease-out;"
+                    style="transform: rotate(${isMapFollowHeading ? 0 : (userHeading || 0)}deg); transition: transform 0.2s ease-out;"
                     class="absolute w-32 h-32 bg-gradient-to-t from-blue-500/30 to-transparent rounded-full origin-center"
                     style="clip-path: polygon(50% 50%, 20% 0%, 80% 0%);"
                   ></div>
@@ -1487,7 +1493,7 @@ const CampusMap = () => {
                   <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-xl text-blue-600 dark:text-blue-400">
                     <Clock size={16} />
                   </div>
-                  <span className="text-xs font-bold">{new Date(selectedEvent.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="text-xs font-bold">{new Date(selectedEvent.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-purple-50 dark:bg-purple-900/30 rounded-xl text-purple-600 dark:text-purple-400">
@@ -1500,6 +1506,49 @@ const CampusMap = () => {
               <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
                 {selectedEvent.description}
               </p>
+              
+              {/* Links Section */}
+              {selectedEvent.links && selectedEvent.links.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-2">
+                  {selectedEvent.links.map((link, idx) => (
+                    <a key={idx} href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors">
+                      <Link2 size={12} />
+                      {link.label}
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {/* Coordinators Section */}
+              {selectedEvent.coordinators && selectedEvent.coordinators.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Coordinators</p>
+                  {selectedEvent.coordinators.map((coord, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 dark:text-white">{coord.name}</p>
+                        <p className="text-[10px] font-medium text-slate-500">{coord.designation}</p>
+                      </div>
+                      <div className="flex gap-1.5">
+                        {coord.mobile && (
+                          <button onClick={(e) => { e.preventDefault(); navigator.clipboard.writeText(coord.mobile); alert('Phone number copied!'); }} className="p-1.5 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 hover:text-blue-600 transition-colors">
+                            <Phone size={14} />
+                          </button>
+                        )}
+                        {coord.whatsapp && (
+                          <a href={`https://wa.me/+91${coord.whatsapp}`} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-green-50 dark:bg-green-900/30 text-green-600 rounded-lg shadow-sm border border-green-200 dark:border-green-800/50 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors">
+                            <MessageCircle size={14} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <div className="pt-2">
+                <EventCountdown time={selectedEvent.time} />
+              </div>
 
               <div className="pt-2 flex items-center justify-between gap-3">
                 <div className="flex flex-col">
@@ -1626,9 +1675,9 @@ const CampusMap = () => {
         />
 
         {/* Custom Layer Control */}
-        <CustomLayersControl 
-          baseLayer={baseLayer} 
-          setBaseLayer={setBaseLayer} 
+        <MapLayersControl 
+          baseLayer={mapLayer} 
+          setBaseLayer={setMapLayer} 
           showBoundary={showBoundary} 
           setShowBoundary={setShowBoundary} 
         />

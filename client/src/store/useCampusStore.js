@@ -15,7 +15,7 @@ const useCampusStore = create(
       navigationPath: null,
       isDarkMode: false,
       buildings: CAMPUS_PRODUCTION_DATA,
-      paths: CAMPUS_PRODUCTION_DATA.filter(b => b.type === 'Path' || b.polylineCoords),
+      paths: CAMPUS_PRODUCTION_DATA.filter(b => (b.type === 'Path' || b.polylineCoords) && b.polylineCoords && b.polylineCoords.length > 0),
       lastFetched: null,
       lastBuildingsFetched: null,
       isLoading: false,
@@ -24,9 +24,11 @@ const useCampusStore = create(
       events: CAMPUS_EVENTS,
       upcomingReminders: [],
       lastEventsFetched: null,
+      mapLayer: 'street',
+      setMapLayer: (layer) => set({ mapLayer: layer }),
       
       fetchEvents: async (force = false) => {
-        const { lastEventsFetched, events } = get();
+        const { lastEventsFetched } = get();
         const now = new Date();
         
         // --- Smart Caching Logic ---
@@ -394,17 +396,49 @@ const useCampusStore = create(
 
 
           // Generate Dynamic Graph from all available paths
-          const allPaths = processed.filter(b => b.type === 'Path' || b.polylineCoords);
+          const supabasePaths = processed.filter(b => (b.type === 'Path' || b.polylineCoords) && b.polylineCoords && b.polylineCoords.length > 0);
+          
+          // Merge with local paths to ensure they are always present even if DB is empty
+          const localPaths = CAMPUS_PRODUCTION_DATA.filter(b => (b.type === 'Path' || b.polylineCoords) && b.polylineCoords && b.polylineCoords.length > 0);
+          
+          // Use a Map to de-duplicate by ID
+          const pathsMap = new Map();
+          localPaths.forEach(p => pathsMap.set(p.id, p));
+          supabasePaths.forEach(p => pathsMap.set(p.id, p));
+          
+          const allPaths = Array.from(pathsMap.values());
           const dynamicNodes = [...CAMPUS_NODES];
           const dynamicEdges = [...CAMPUS_EDGES];
 
           // Use a coordinate map to connect paths at junctions
           const coordToNodeId = {};
           // Initialize map with existing graph nodes
-          CAMPUS_NODES.forEach(n => {
-            const key = `${n.coords[0].toFixed(7)},${n.coords[1].toFixed(7)}`;
-            coordToNodeId[key] = n.id;
-          });
+          const allNodes = [...dynamicNodes];
+          
+          const getDistance = (c1, c2) => Math.sqrt(Math.pow(c1[0] - c2[0], 2) + Math.pow(c1[1] - c2[1], 2));
+          const SNAP_THRESHOLD = 0.00008; // Approx 8-10 meters fuzzy snapping
+
+          const findOrAddNode = (c, pathId, idx) => {
+            // 1. Try exact match first for performance
+            const exactKey = `${c[0].toFixed(7)},${c[1].toFixed(7)}`;
+            if (coordToNodeId[exactKey]) return coordToNodeId[exactKey];
+
+            // 2. Try fuzzy match with existing nodes
+            for (const node of allNodes) {
+              if (getDistance(node.coords, c) < SNAP_THRESHOLD) {
+                // Cache this exact coordinate to the found node for future exact matches
+                coordToNodeId[exactKey] = node.id;
+                return node.id;
+              }
+            }
+
+            // 3. Create new node if no match
+            const newNodeId = `dyn_${pathId}_${idx}`;
+            const newNode = { id: newNodeId, name: `Path Pt`, coords: c };
+            allNodes.push(newNode);
+            coordToNodeId[exactKey] = newNodeId;
+            return newNodeId;
+          };
 
           allPaths.forEach(path => {
             const coords = path.polylineCoords;
@@ -413,18 +447,11 @@ const useCampusStore = create(
             let prevNodeId = null;
 
             coords.forEach((c, i) => {
-              const key = `${c[0].toFixed(7)},${c[1].toFixed(7)}`;
-              let nodeId = coordToNodeId[key];
+              const nodeId = findOrAddNode(c, path.id, i);
 
-              if (!nodeId) {
-                nodeId = `dyn_${path.id}_${i}`;
-                dynamicNodes.push({ id: nodeId, name: `${path.name} Pt ${i}`, coords: c });
-                coordToNodeId[key] = nodeId;
-              }
-
-              if (prevNodeId) {
-                const p1 = dynamicNodes.find(n => n.id === prevNodeId).coords;
-                const dist = Math.sqrt(Math.pow(p1[0] - c[0], 2) + Math.pow(p1[1] - c[1], 2));
+              if (prevNodeId && prevNodeId !== nodeId) {
+                const p1 = allNodes.find(n => n.id === prevNodeId).coords;
+                const dist = getDistance(p1, c);
                 
                 // Add bi-directional edges
                 dynamicEdges.push({ from: prevNodeId, to: nodeId, weight: dist });
@@ -437,7 +464,7 @@ const useCampusStore = create(
           set({ 
             buildings: processed.filter(b => b.type !== 'Path' && !b.id?.includes('path')), 
             paths: allPaths,
-            campusGraph: { nodes: dynamicNodes, edges: dynamicEdges },
+            campusGraph: { nodes: allNodes, edges: dynamicEdges },
             lastFetched: now, 
             isLoading: false 
           });
@@ -459,14 +486,12 @@ const useCampusStore = create(
       name: 'campus-navigator-storage',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        buildings: state.buildings,
-        paths: state.paths,
-        lastFetched: state.lastFetched,
         isDarkMode: state.isDarkMode,
-        bookmarks: state.bookmarks
+        bookmarks: state.bookmarks,
+        mapLayer: state.mapLayer
       }),
-      version: 11,
-      migrate: (persistedState, version) => persistedState
+      version: 15,
+      migrate: () => ({})  // Clear all stale persisted state on version bump
     }
   )
 );

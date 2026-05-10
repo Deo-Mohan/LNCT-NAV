@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Edit2, Trash2, Layout, Shield, AlertCircle, CheckCircle2, X, Map as MapIcon, Layers } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Plus, Edit2, Trash2, Layout, Shield, AlertCircle, CheckCircle2, X, Map as MapIcon, Layers, Link2, User, Phone, MessageCircle, LogOut } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import useCampusStore from '../store/useCampusStore';
 
@@ -56,20 +56,30 @@ const neubrutalistBtnStyles = `
   letter-spacing: -0.02em;
 }
 .btn-text-container span {
-  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .btn-text-main {
   transform: translateY(0);
+  opacity: 1;
 }
 .btn-text-hover {
   position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
   transform: translateY(100%);
+  opacity: 0;
 }
 .neubrutalist-btn:hover .btn-text-main {
   transform: translateY(-100%);
+  opacity: 0;
 }
 .neubrutalist-btn:hover .btn-text-hover {
   transform: translateY(0);
+  opacity: 1;
 }
 .arrow-circle {
   padding: 0.8em;
@@ -99,10 +109,29 @@ const neubrutalistBtnStyles = `
 .neubrutalist-btn:hover .arrow-circle {
   transform: translateX(3px) rotate(-45deg);
 }
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 `;
 
 const Admin = () => {
+  const navigate = useNavigate();
   const { buildings, fetchBuildings } = useCampusStore();
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      navigate('/', { replace: true });
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Fallback redirect
+      window.location.href = '/';
+    }
+  };
   const [activeTab, setActiveTab] = useState('buildings');
   const [showSuccess, setShowSuccess] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -130,7 +159,9 @@ const Admin = () => {
     description: '',
     poster_url: '',
     venue_id: '',
-    room_details: ''
+    room_details: '',
+    links: [],
+    coordinators: []
   });
 
   useEffect(() => {
@@ -234,21 +265,27 @@ const Admin = () => {
         finalPosterUrl = await uploadImage(compressed);
       }
 
+      const eventData = { 
+        ...newEvent, 
+        poster_url: finalPosterUrl,
+        time: new Date(newEvent.time).toISOString()
+      };
+
       if (editingItem) {
         const { error } = await supabase
           .from('events')
-          .update({ ...newEvent, poster_url: finalPosterUrl })
+          .update(eventData)
           .eq('id', editingItem.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('events')
-          .insert([{ ...newEvent, poster_url: finalPosterUrl }]);
+          .insert([eventData]);
         if (error) throw error;
       }
 
       handleSuccess();
-      setNewEvent({ title: '', venue: '', time: '', category: 'Hackathon', description: '', poster_url: '' });
+      setNewEvent({ title: '', venue: '', time: '', category: 'Hackathon', description: '', poster_url: '', venue_id: '', room_details: '', links: [], coordinators: [] });
       setPosterFile(null);
       setEditingItem(null);
     } catch (err) {
@@ -284,15 +321,18 @@ const Admin = () => {
   const startEdit = (item) => {
     setEditingItem(item);
     if (activeTab === 'events') {
+      const localTime = item.time ? new Date(item.time).toLocaleString('sv').replace(' ', 'T').slice(0, 16) : '';
       setNewEvent({
         title: item.title || '',
         venue: item.venue || '',
-        time: item.time || '',
+        time: localTime,
         category: item.category || 'Hackathon',
         description: item.description || '',
         poster_url: item.poster_url || '',
         venue_id: item.venue_id || '',
-        room_details: item.room_details || ''
+        room_details: item.room_details || '',
+        links: item.links || [],
+        coordinators: item.coordinators || []
       });
     } else {
       setNewBuilding({
@@ -341,6 +381,14 @@ const Admin = () => {
             >
               <Plus size={18} />
               {activeTab === 'events' ? 'Add Event' : 'Add Building'}
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="p-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-all flex items-center gap-2 font-bold text-sm"
+              title="Logout"
+            >
+              <LogOut size={20} />
+              <span className="hidden sm:inline">Logout</span>
             </button>
             <Link to="/" className="p-2.5 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700 transition-all">
               <X size={20} />
@@ -406,7 +454,9 @@ const Admin = () => {
                       <td className="py-4 px-4 font-bold text-slate-900 dark:text-white">{activeTab === 'events' ? item.title : item.name}</td>
                       <td className="py-4 px-4 text-sm text-slate-500">{activeTab === 'events' ? item.venue : item.category}</td>
                       <td className="py-4 px-4 text-sm text-slate-500">
-                        {activeTab === 'events' ? new Date(item.time).toLocaleDateString() : `${item.floors} Floors`}
+                                                {activeTab === 'events' 
+                          ? new Date(item.time).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) 
+                          : `${item.floors} Floors`}
                       </td>
                       <td className="py-4 px-4 text-right flex items-center justify-end gap-2">
                         <button onClick={() => startEdit(item)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
@@ -433,7 +483,7 @@ const Admin = () => {
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setIsModalOpen(false); setEditingItem(null); }} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl overflow-hidden border border-white/10">
-              <form onSubmit={activeTab === 'events' ? handleRegisterEvent : handleRegisterBuilding} className="p-8 max-h-[85vh] overflow-y-auto">
+              <form onSubmit={activeTab === 'events' ? handleRegisterEvent : handleRegisterBuilding} className="p-8 max-h-[85vh] overflow-y-auto no-scrollbar">
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-2xl font-black">
                     {editingItem ? 'Edit ' : 'Register '}
@@ -446,6 +496,23 @@ const Admin = () => {
                   {activeTab === 'events' ? (
                     <>
                       <input type="text" required placeholder="Event Name" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} className="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 rounded-2xl" />
+                      
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-400 ml-2 uppercase tracking-wider">Event Category</label>
+                        <select 
+                          value={newEvent.category} 
+                          onChange={e => setNewEvent({...newEvent, category: e.target.value})} 
+                          className="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                          <option>Hackathon</option>
+                          <option>Sports</option>
+                          <option>Cultural</option>
+                          <option>Workshop</option>
+                          <option>Seminar</option>
+                          <option>Placement</option>
+                          <option>Other</option>
+                        </select>
+                      </div>
                       
                       <div className="space-y-1 relative">
                         <label className="text-xs font-bold text-slate-400 ml-2 uppercase tracking-wider">Select Venue (Searchable)</label>
@@ -525,6 +592,80 @@ const Admin = () => {
                         </p>
                       </div>
                       <textarea placeholder="Description" value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} className="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 rounded-2xl" rows="3" />
+                      
+                      {/* Dynamic Links Section */}
+                      <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2"><Link2 size={16} /> Additional Links</h3>
+                          <button type="button" onClick={() => setNewEvent({...newEvent, links: [...newEvent.links, { label: '', url: '' }]})} className="p-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800/50 transition-colors">
+                            <Plus size={16} />
+                          </button>
+                        </div>
+                        {newEvent.links.map((link, idx) => (
+                          <div key={idx} className="flex gap-2 items-start">
+                            <input type="text" placeholder="Label (e.g. YT Video, GForm)" value={link.label} onChange={e => {
+                              const newLinks = [...newEvent.links];
+                              newLinks[idx].label = e.target.value;
+                              setNewEvent({...newEvent, links: newLinks});
+                            }} className="w-1/3 px-3 py-2 text-sm bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700" />
+                            <input type="url" placeholder="https://..." value={link.url} onChange={e => {
+                              const newLinks = [...newEvent.links];
+                              newLinks[idx].url = e.target.value;
+                              setNewEvent({...newEvent, links: newLinks});
+                            }} className="flex-1 px-3 py-2 text-sm bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700" />
+                            <button type="button" onClick={() => {
+                              const newLinks = newEvent.links.filter((_, i) => i !== idx);
+                              setNewEvent({...newEvent, links: newLinks});
+                            }} className="p-2 text-slate-400 hover:text-red-500"><X size={16} /></button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Dynamic Coordinators Section */}
+                      <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2"><User size={16} /> Coordinators</h3>
+                          <button type="button" onClick={() => setNewEvent({...newEvent, coordinators: [...newEvent.coordinators, { name: '', designation: '', mobile: '', whatsapp: '' }]})} className="p-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800/50 transition-colors">
+                            <Plus size={16} />
+                          </button>
+                        </div>
+                        {newEvent.coordinators.map((coord, idx) => (
+                          <div key={idx} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 relative">
+                            <button type="button" onClick={() => {
+                              const newCoords = newEvent.coordinators.filter((_, i) => i !== idx);
+                              setNewEvent({...newEvent, coordinators: newCoords});
+                            }} className="absolute top-2 right-2 p-1 text-slate-400 hover:text-red-500"><X size={16} /></button>
+                            <div className="grid grid-cols-2 gap-2 pr-8">
+                              <input type="text" placeholder="Name" value={coord.name} onChange={e => {
+                                const newCoords = [...newEvent.coordinators];
+                                newCoords[idx].name = e.target.value;
+                                setNewEvent({...newEvent, coordinators: newCoords});
+                              }} className="px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 rounded-xl" />
+                              <input type="text" placeholder="Designation (e.g. Faculty)" value={coord.designation} onChange={e => {
+                                const newCoords = [...newEvent.coordinators];
+                                newCoords[idx].designation = e.target.value;
+                                setNewEvent({...newEvent, coordinators: newCoords});
+                              }} className="px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 rounded-xl" />
+                              <div className="relative">
+                                <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                <input type="tel" placeholder="Mobile" value={coord.mobile} onChange={e => {
+                                  const newCoords = [...newEvent.coordinators];
+                                  newCoords[idx].mobile = e.target.value;
+                                  setNewEvent({...newEvent, coordinators: newCoords});
+                                }} className="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 rounded-xl" />
+                              </div>
+                              <div className="relative">
+                                <MessageCircle className="absolute left-2.5 top-1/2 -translate-y-1/2 text-green-500" size={14} />
+                                <input type="tel" placeholder="WhatsApp" value={coord.whatsapp} onChange={e => {
+                                  const newCoords = [...newEvent.coordinators];
+                                  newCoords[idx].whatsapp = e.target.value;
+                                  setNewEvent({...newEvent, coordinators: newCoords});
+                                }} className="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 rounded-xl" />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </>
                   ) : (
                     <>

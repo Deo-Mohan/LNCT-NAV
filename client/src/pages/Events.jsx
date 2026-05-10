@@ -14,9 +14,50 @@ import {
   Sparkles,
   ArrowLeft,
   RefreshCw,
-  X
+  X,
+  Link2,
+  User,
+  Phone,
+  MessageCircle
 } from 'lucide-react';
 import EventSkeleton from '../components/EventSkeleton';
+
+const EventCountdown = ({ time }) => {
+  const [timeLeft, setTimeLeft] = useState('');
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const difference = new Date(time) - new Date();
+      if (difference > 0) {
+        const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+        const minutes = Math.floor((difference / 1000 / 60) % 60);
+        const seconds = Math.floor((difference / 1000) % 60);
+        
+        let timeString = '';
+        if (days > 0) timeString += `${days}d `;
+        if (hours > 0 || days > 0) timeString += `${hours}h `;
+        timeString += `${minutes}m ${seconds}s`;
+        setTimeLeft(timeString);
+      } else {
+        setTimeLeft('Started');
+      }
+    };
+
+    calculateTimeLeft();
+    const timer = setInterval(calculateTimeLeft, 1000);
+    return () => clearInterval(timer);
+  }, [time]);
+
+  if (!timeLeft) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded-2xl border border-slate-200 dark:border-slate-700/50 justify-center">
+      <Clock size={16} className={timeLeft === 'Started' ? '' : 'animate-pulse'} />
+      <span className="text-xs font-black uppercase tracking-wider">{timeLeft === 'Started' ? 'Happening Now' : `Starts in ${timeLeft}`}</span>
+    </div>
+  );
+};
 
 const Events = () => {
   const navigate = useNavigate();
@@ -44,7 +85,7 @@ const Events = () => {
   const [filter, setFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const categories = ['All', 'Hackathon', 'Workshop', 'Seminar', 'Cultural'];
+  const categories = ['All', 'Hackathon', 'Workshop', 'Seminar', 'Cultural', 'Sports'];
 
   const filteredEvents = events.filter(event => {
     const matchesFilter = filter === 'All' || event.category === filter;
@@ -220,7 +261,7 @@ const Events = () => {
                     {new Date(event.time).toLocaleDateString([], { month: 'long', day: 'numeric' })}
                     <span className="w-1 h-1 bg-slate-300 rounded-full mx-1"></span>
                     <Clock size={14} />
-                    {new Date(event.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(event.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
                   </div>
 
                   <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2 line-clamp-1">
@@ -242,6 +283,47 @@ const Events = () => {
                         </p>
                       </div>
                     </div>
+
+                    {/* Links Section */}
+                    {event.links && event.links.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {event.links.map((link, idx) => (
+                          <a key={idx} href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors">
+                            <Link2 size={12} />
+                            {link.label}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Coordinators Section */}
+                    {event.coordinators && event.coordinators.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Coordinators</p>
+                        {event.coordinators.map((coord, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                            <div>
+                              <p className="text-xs font-bold text-slate-900 dark:text-white">{coord.name}</p>
+                              <p className="text-[10px] font-medium text-slate-500">{coord.designation}</p>
+                            </div>
+                            <div className="flex gap-1.5">
+                              {coord.mobile && (
+                                <button onClick={(e) => { e.preventDefault(); navigator.clipboard.writeText(coord.mobile); alert('Phone number copied!'); }} className="p-1.5 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 hover:text-blue-600 transition-colors">
+                                  <Phone size={14} />
+                                </button>
+                              )}
+                              {coord.whatsapp && (
+                                <a href={`https://wa.me/+91${coord.whatsapp}`} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-green-50 dark:bg-green-900/30 text-green-600 rounded-lg shadow-sm border border-green-200 dark:border-green-800/50 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors">
+                                  <MessageCircle size={14} />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <EventCountdown time={event.time} />
 
                     <div className="flex gap-2">
                       <button 
